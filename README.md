@@ -1,4 +1,4 @@
-# Google Forms & Sheets MCP Server
+# Google MCP Server
 
 A Model Context Protocol (MCP) server for Google Forms and Google Sheets. Create, manage, and automate Google Forms and Spreadsheets with 50 tools.
 
@@ -18,15 +18,35 @@ A Model Context Protocol (MCP) server for Google Forms and Google Sheets. Create
 ## Prerequisites
 
 - Node.js 18+ installed
+- Claude Desktop installed
 - A Google account
 
 ## Quick Setup
 
-### 1. Install
+### Option A: Windows Installer (Recommended)
+
+**One-click install for Windows.** The installer handles everything automatically:
+
+1. Place `key.json` in the project root (see "Get Google API Credentials" below)
+2. Double-click `CPP/installer.exe`
+3. The installer will:
+   - Check that Node.js and Claude Desktop are installed
+   - Run `npm install` and `npm run build`
+   - Guide you through Google OAuth (opens browser)
+   - Configure Claude Desktop automatically
+4. Claude Desktop opens — you're ready to go
+
+**Auto-Updates:** Once installed, the MCP server checks for updates from GitHub every time Claude Desktop starts. If a new version is available, it pulls the latest code and rebuilds automatically in the background. No manual updates needed.
+
+**Drag-and-drop support:** You can also drag `key.json` directly onto `installer.exe`.
+
+### Option B: Manual Setup
+
+#### 1. Install
 
 ```bash
-git clone https://github.com/matteoantoci/google-forms-mcp.git
-cd google-forms-mcp
+git clone https://github.com/leeisfailing/google-mcp.git
+cd google-mcp
 npm install
 npm run build
 ```
@@ -34,7 +54,7 @@ npm run build
 ### 2. Get Google API Credentials
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (e.g., "Google Forms MCP")
+2. Create a new project (e.g., "Google MCP")
 3. Enable these APIs:
    - [Google Forms API](https://console.cloud.google.com/apis/library/forms.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
@@ -43,7 +63,7 @@ npm run build
 5. Click "Create Credentials" > "OAuth client ID"
 6. Configure OAuth consent screen if prompted:
    - Select "External" user type
-   - Fill in app name (e.g., "Google Forms MCP")
+   - Fill in app name (e.g., "Google MCP")
    - Add your email as developer contact
    - Save and continue through the steps
 7. Select "Desktop app" as application type
@@ -55,7 +75,7 @@ npm run build
 Copy the downloaded JSON file and rename it to `key.json` in the project root:
 
 ```
-google-forms-mcp/
+google-mcp/
   key.json           <-- rename your downloaded file to this
   src/
   package.json
@@ -90,13 +110,15 @@ After this, `token.json` is saved and you never need to authenticate again.
 ```json
 {
   "mcpServers": {
-    "google-forms-mcp": {
+    "google-mcp": {
       "command": "node",
-      "args": ["C:\\Users\\You\\Desktop\\google-forms-mcp\\build\\index.js"]
+      "args": ["C:\\Users\\You\\Desktop\\google-mcp\\auto-update.js"]
     }
   }
 }
 ```
+
+> **Note:** Claude Desktop uses `auto-update.js` which automatically checks for updates from GitHub on startup.
 
 #### OpenCode
 
@@ -106,9 +128,9 @@ After this, `token.json` is saved and you never need to authenticate again.
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "google-forms-mcp": {
+    "google-mcp": {
       "type": "local",
-      "command": ["node", "/absolute/path/to/google-forms-mcp/build/index.js"]
+      "command": ["node", "/absolute/path/to/google-mcp/build/index.js"]
     }
   }
 }
@@ -121,9 +143,9 @@ After this, `token.json` is saved and you never need to authenticate again.
 ```jsonc
 {
   "mcp": {
-    "google-forms-mcp": {
+    "google-mcp": {
       "type": "local",
-      "command": ["node", "/absolute/path/to/google-forms-mcp/build/index.js"]
+      "command": ["node", "/absolute/path/to/google-mcp/build/index.js"]
     }
   }
 }
@@ -136,9 +158,9 @@ After this, `token.json` is saved and you never need to authenticate again.
 ```json
 {
   "mcpServers": {
-    "google-forms-mcp": {
+    "google-mcp": {
       "command": "node",
-      "args": ["/absolute/path/to/google-forms-mcp/build/index.js"]
+      "args": ["/absolute/path/to/google-mcp/build/index.js"]
     }
   }
 }
@@ -151,9 +173,9 @@ After this, `token.json` is saved and you never need to authenticate again.
 ```json
 {
   "mcpServers": {
-    "google-forms-mcp": {
+    "google-mcp": {
       "command": "node",
-      "args": ["/absolute/path/to/google-forms-mcp/build/index.js"]
+      "args": ["/absolute/path/to/google-mcp/build/index.js"]
     }
   }
 }
@@ -166,7 +188,7 @@ Restart Claude Desktop / OpenCode / Kilo Code / Cline for the MCP to load.
 ## Project Structure
 
 ```
-google-forms-mcp/
+google-mcp/
   key.json           # Your Google OAuth client credentials (keep secret)
   token.json         # Auto-generated refresh token (keep secret)
   .gitignore         # Prevents secrets from being committed

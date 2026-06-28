@@ -1,13 +1,13 @@
-# Google Forms MCP - Comprehensive Test Prompt
+# Google MCP - Comprehensive Test Prompt
 
-Copy and paste the prompt below into a new Claude conversation with the Google Forms MCP server connected. It tests every tool in order, including multi-section support, grading, analytics, and error handling.
+Copy and paste the prompt below into a new Claude conversation with the Google MCP server connected. It tests every tool in order, including multi-section support, grading, analytics, and error handling.
 
 ---
 
 ## Test Prompt
 
 ```
-I need you to thoroughly test every Google Forms MCP tool by creating, modifying, inspecting, and cleaning up a test form. Follow these steps IN ORDER. At each step, report the result (success/failure) and any issues. At the end, summarize what worked and what didn't.
+I need you to thoroughly test every Google MCP tool by creating, modifying, inspecting, and cleaning up a test form. Follow these steps IN ORDER. At each step, report the result (success/failure) and any issues. At the end, summarize what worked and what didn't.
 
 **STEP 1 - Create a form**
 Create a new Google Form with title "MCP Test Form" and description "Automated test of all MCP tools".
