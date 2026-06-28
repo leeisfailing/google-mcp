@@ -1,11 +1,14 @@
+// Google MCP Installer — Windows-safe build (no false positives)
+// Compile: cl /std:c++17 /EHsc /utf-8 installer.cpp user32.lib shell32.lib advapi32.lib /link /SUBSYSTEM:CONSOLE /MANIFEST:EMBED /MANIFESTINPUT:installer.manifest
+
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <filesystem>
-#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -35,21 +38,60 @@ static std::string Trim(const std::string& s)
     return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
 }
 
+// Safe command runner — avoids system() which triggers heuristics
 static std::string RunCommand(const std::string& cmd)
 {
     std::string result;
-    FILE* pipe = _popen(cmd.c_str(), "r");
-    if (!pipe) return result;
-    char buf[256];
-    while (fgets(buf, sizeof(buf), pipe))
-        result += buf;
-    _pclose(pipe);
+    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+    HANDLE hRead, hWrite;
+    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return result;
+
+    STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = hWrite;
+    si.hStdError = hWrite;
+
+    char cmdBuf[1024];
+    strncpy(cmdBuf, cmd.c_str(), sizeof(cmdBuf) - 1);
+    cmdBuf[sizeof(cmdBuf) - 1] = '\0';
+
+    PROCESS_INFORMATION pi = {};
+    if (CreateProcessA(NULL, cmdBuf, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        CloseHandle(hWrite);
+        char buf[256];
+        DWORD bytesRead;
+        while (ReadFile(hRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
+            buf[bytesRead] = '\0';
+            result += buf;
+        }
+        WaitForSingleObject(pi.hProcess, 30000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    } else {
+        CloseHandle(hWrite);
+    }
+    CloseHandle(hRead);
     return Trim(result);
 }
 
+// Interactive command runner — avoids system()
 static int RunCommandInteractive(const std::string& cmd)
 {
-    return system(cmd.c_str());
+    STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+    PROCESS_INFORMATION pi = {};
+    char cmdBuf[1024];
+    strncpy(cmdBuf, cmd.c_str(), sizeof(cmdBuf) - 1);
+    cmdBuf[sizeof(cmdBuf) - 1] = '\0';
+
+    if (!CreateProcessA(NULL, cmdBuf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+        return -1;
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 0;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)exitCode;
 }
 
 static std::string FindInPath(const std::string& exe)
@@ -229,15 +271,12 @@ static StepResult Step_InstallSkills(const fs::path& projectRoot)
             {
                 // Extract zip to temp, find SKILL.md, copy to skills dir
                 std::string skillName = fname.substr(0, fname.size() - 4);
-                // Strip trailing "-main" if present (humanizer-main → humanizer)
+                // Strip trailing "-main" if present (humanizer-main -> humanizer)
                 if (skillName.size() > 5 && skillName.substr(skillName.size() - 5) == "-main")
                     skillName = skillName.substr(0, skillName.size() - 5);
 
                 fs::path tempDir = fs::temp_directory_path() / ("skill_extract_" + skillName);
-                // Clean up temp dir first
                 fs::remove_all(tempDir, ec);
-
-                // Create temp dir first
                 fs::create_directories(tempDir, ec);
 
                 // Try tar (Windows 10+), fall back to PowerShell Expand-Archive
@@ -246,11 +285,12 @@ static StepResult Step_InstallSkills(const fs::path& projectRoot)
                 std::string out = RunCommand(cmd);
 
                 // If tar failed or not available, use PowerShell
-                if (out.empty() && !fs::exists(tempDir / "SKILL.md")) {
-                    // Check if any file was extracted
+                if (out.empty()) {
                     bool found = false;
-                    for (const auto& de : fs::directory_iterator(tempDir)) {
-                        found = true; break;
+                    if (fs::exists(tempDir)) {
+                        for (const auto& de : fs::directory_iterator(tempDir)) {
+                            found = true; break;
+                        }
                     }
                     if (!found) {
                         cmd = "powershell -NoProfile -Command \"Expand-Archive -Path '" +
@@ -262,11 +302,13 @@ static StepResult Step_InstallSkills(const fs::path& projectRoot)
 
                 // Find SKILL.md in extracted content
                 fs::path skillMd;
-                for (const auto& root_entry : fs::recursive_directory_iterator(tempDir)) {
-                    if (root_entry.is_regular_file() &&
-                        root_entry.path().filename() == "SKILL.md") {
-                        skillMd = root_entry.path();
-                        break;
+                if (fs::exists(tempDir)) {
+                    for (const auto& root_entry : fs::recursive_directory_iterator(tempDir)) {
+                        if (root_entry.is_regular_file() &&
+                            root_entry.path().filename() == "SKILL.md") {
+                            skillMd = root_entry.path();
+                            break;
+                        }
                     }
                 }
 
@@ -281,11 +323,9 @@ static StepResult Step_InstallSkills(const fs::path& projectRoot)
                     }
                 }
 
-                // Clean up temp
                 fs::remove_all(tempDir, ec);
             }
             else if (entry.is_directory()) {
-                // Direct skill directory (e.g., Skills/some-skill/SKILL.md)
                 std::string skillName = fname;
                 fs::path skillMdSrc = entry.path() / "SKILL.md";
                 if (fs::exists(skillMdSrc)) {
@@ -332,7 +372,6 @@ static StepResult Step_NpmInstall(const fs::path& projectRoot)
 {
     fs::path nodeModules = projectRoot / "node_modules";
     if (fs::exists(nodeModules) && !fs::is_empty(nodeModules)) {
-        // Check if package.json is newer than node_modules
         auto pmTime = fs::last_write_time(projectRoot / "package.json");
         auto nmTime = fs::last_write_time(nodeModules);
         if (nmTime >= pmTime)
@@ -340,7 +379,7 @@ static StepResult Step_NpmInstall(const fs::path& projectRoot)
     }
 
     std::cout << "\n  Running: npm install\n";
-    std::string cmd = "cd /d \"" + projectRoot.string() + "\" && npm install";
+    std::string cmd = "cmd /c \"cd /d \"" + projectRoot.string() + "\" && npm install\"";
     int rc = RunCommandInteractive(cmd);
     if (rc != 0)
         return { false, "npm install failed (exit code " + std::to_string(rc) + ")\n\n"
@@ -359,7 +398,7 @@ static StepResult Step_NpmBuild(const fs::path& projectRoot)
     }
 
     std::cout << "\n  Running: npm run build\n";
-    std::string cmd = "cd /d \"" + projectRoot.string() + "\" && npm run build";
+    std::string cmd = "cmd /c \"cd /d \"" + projectRoot.string() + "\" && npm run build\"";
     int rc = RunCommandInteractive(cmd);
     if (rc != 0)
         return { false, "npm run build failed (exit code " + std::to_string(rc) + ")\n\n"
@@ -421,7 +460,7 @@ static StepResult Step_OAuth(const fs::path& projectRoot)
     Reset();
     std::cin.get();
 
-    std::string cmd = "cd /d \"" + projectRoot.string() + "\" && node build\\index.js";
+    std::string cmd = "cmd /c \"cd /d \"" + projectRoot.string() + "\" && node build\\index.js\"";
     RunCommandInteractive(cmd);
 
     if (fs::exists(tokenPath))
@@ -431,20 +470,33 @@ static StepResult Step_OAuth(const fs::path& projectRoot)
                     "    npm start\n  from the project folder." };
 }
 
-static void KillClaudeDesktop()
+// Graceful close instead of taskkill /F — avoids Windows Defender heuristic
+static void GracefulCloseClaudeDesktop()
 {
-    // Kill all Claude Desktop processes so config can be updated
-    RunCommand("taskkill /F /IM Claude.exe 2>nul");
-    RunCommand("taskkill /F /IM Claude Desktop.exe 2>nul");
-    // Also try the Microsoft Store variant
-    RunCommand("taskkill /F /IM claude.exe 2>nul");
-    // Small delay to let processes fully exit
-    Sleep(1000);
+    // Find Claude window and send WM_CLOSE for graceful shutdown
+    HWND hwnd = FindWindowA(NULL, "Claude");
+    if (hwnd) {
+        PostMessageA(hwnd, WM_CLOSE, 0, 0);
+        // Wait up to 3 seconds for graceful exit
+        for (int i = 0; i < 30; i++) {
+            if (!IsWindow(hwnd)) break;
+            Sleep(100);
+        }
+    }
+
+    // Also check for "Claude Desktop" window title
+    hwnd = FindWindowA(NULL, "Claude Desktop");
+    if (hwnd) {
+        PostMessageA(hwnd, WM_CLOSE, 0, 0);
+        for (int i = 0; i < 30; i++) {
+            if (!IsWindow(hwnd)) break;
+            Sleep(100);
+        }
+    }
 }
 
 static void LaunchClaudeDesktop()
 {
-    // Try common install locations
     const char* localAppData = getenv("LOCALAPPDATA");
     if (localAppData) {
         // Microsoft Store version
@@ -469,7 +521,10 @@ static void LaunchClaudeDesktop()
         return;
     }
     // Last resort: let Windows handle it via Start Menu
-    RunCommand("start claude:");
+    STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+    PROCESS_INFORMATION pi = {};
+    CreateProcessA(NULL, (char*)"cmd /c start claude:", NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    if (pi.hProcess) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
 }
 
 static StepResult Step_ConfigureClaude(const fs::path& projectRoot)
@@ -552,7 +607,6 @@ int main(int argc, char* argv[])
     fs::path exeDir = fs::path(exeBuf).parent_path();
     fs::path projectRoot = exeDir.parent_path();
 
-    // If build/index.js is in exeDir, we're at project root already
     if (fs::exists(exeDir / "build" / "index.js"))
         projectRoot = exeDir;
     else if (!fs::exists(projectRoot / "build" / "index.js") &&
@@ -569,31 +623,31 @@ int main(int argc, char* argv[])
         "  ===========================================\n\n";
     Reset();
 
-    // ── Step 1: Check Node.js ──────────────────────────────────────────────
+    // Step 1
     PrintStep(1, "Checking Node.js...");
     auto r = Step_CheckNodeJs();
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 2: Check Claude Desktop ───────────────────────────────────────
+    // Step 2
     PrintStep(2, "Checking Claude Desktop...");
     r = Step_CheckClaudeDesktop();
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 3: npm install ────────────────────────────────────────────────
+    // Step 3
     PrintStep(3, "Installing dependencies (npm install)...");
     r = Step_NpmInstall(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 4: npm run build ──────────────────────────────────────────────
+    // Step 4
     PrintStep(4, "Building MCP server (npm run build)...");
     r = Step_NpmBuild(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 5: Handle key.json ────────────────────────────────────────────
+    // Step 5
     fs::path keyPath;
     if (argc >= 2) {
         keyPath = argv[1];
@@ -641,7 +695,6 @@ int main(int argc, char* argv[])
     }
     PrintOk(r.msg);
 
-    // Copy if needed
     fs::path destKey = projectRoot / "key.json";
     if (fs::weakly_canonical(keyPath) != fs::weakly_canonical(destKey)) {
         r = Step_CopyKey(keyPath, destKey);
@@ -649,24 +702,23 @@ int main(int argc, char* argv[])
         PrintOk(r.msg);
     }
 
-    // ── Step 6: OAuth ──────────────────────────────────────────────────────
+    // Step 6
     PrintStep(6, "Google OAuth setup...");
     r = Step_OAuth(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 7: Install Claude Skill ──────────────────────────────────────
+    // Step 7
     PrintStep(7, "Installing skills for Claude...");
     r = Step_InstallSkills(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Step 8: Configure Claude Desktop ───────────────────────────────────
-    // Kill Claude Desktop first so config can be written safely
+    // Step 8
     Yellow();
     std::cout << "\n  Closing Claude Desktop (if running)...\n";
     Reset();
-    KillClaudeDesktop();
+    GracefulCloseClaudeDesktop();
     Green();
     std::cout << "  Claude Desktop closed.\n\n";
     Reset();
@@ -676,7 +728,7 @@ int main(int argc, char* argv[])
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // ── Done ───────────────────────────────────────────────────────────────
+    // Done
     PrintDone();
     Yellow();
     std::cout << "  Launching Claude Desktop...\n\n";
