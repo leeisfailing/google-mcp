@@ -590,6 +590,43 @@ static void PrintDone()
               << "  Forms, Classroom, Meet, and Drive Labels.\n\n";
 }
 
+// ─── Git Clone Step ────────────────────────────────────────────────────────────
+
+static StepResult Step_CheckGit()
+{
+    std::string gitPath = FindInPath("git");
+    if (gitPath.empty())
+        return { false, "Git is NOT installed.\n\n"
+                        "  Install from: https://git-scm.com/download/win\n"
+                        "  Use the default settings during install." };
+    return { true, "Git found" };
+}
+
+static StepResult Step_GitClone(const fs::path& installDir)
+{
+    if (fs::exists(installDir / "build" / "index.js"))
+        return { true, "Project already installed at " + installDir.string() };
+
+    if (fs::exists(installDir)) {
+        // Directory exists but incomplete — remove and reclone
+        std::error_code ec;
+        fs::remove_all(installDir, ec);
+    }
+
+    std::cout << "\n  Cloning Google MCP to " << installDir.string() << "...\n";
+    std::string cmd = "git clone https://github.com/leeisfailing/google-mcp.git \"" +
+                      installDir.string() + "\"";
+    int rc = RunCommandInteractive(cmd);
+    if (rc != 0)
+        return { false, "git clone failed (exit code " + std::to_string(rc) + ")\n\n"
+                        "  Check your internet connection and try again." };
+
+    if (!fs::exists(installDir / "package.json"))
+        return { false, "Clone succeeded but package.json not found." };
+
+    return { true, "Cloned to " + installDir.string() };
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[])
@@ -601,17 +638,8 @@ int main(int argc, char* argv[])
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hOut, dwMode);
 
-    // Resolve paths relative to the exe
-    char exeBuf[MAX_PATH] = {};
-    GetModuleFileNameA(NULL, exeBuf, MAX_PATH);
-    fs::path exeDir = fs::path(exeBuf).parent_path();
-    fs::path projectRoot = exeDir.parent_path();
-
-    if (fs::exists(exeDir / "build" / "index.js"))
-        projectRoot = exeDir;
-    else if (!fs::exists(projectRoot / "build" / "index.js") &&
-             fs::exists(exeDir / "package.json"))
-        projectRoot = exeDir;
+    // Install location: always C:\google-mcp
+    fs::path projectRoot = "C:\\google-mcp";
 
     SetConsoleTitleA("Google MCP Installer");
 
@@ -623,31 +651,44 @@ int main(int argc, char* argv[])
         "  ===========================================\n\n";
     Reset();
 
-    // Step 1
+    // Step 1: Check Node.js
     PrintStep(1, "Checking Node.js...");
     auto r = Step_CheckNodeJs();
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 2
-    PrintStep(2, "Checking Claude Desktop...");
+    // Step 2: Check Git
+    PrintStep(2, "Checking Git...");
+    r = Step_CheckGit();
+    if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
+    PrintOk(r.msg);
+
+    // Step 3: Check Claude Desktop
+    PrintStep(3, "Checking Claude Desktop...");
     r = Step_CheckClaudeDesktop();
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 3
-    PrintStep(3, "Installing dependencies (npm install)...");
+    // Step 4: Clone repo
+    PrintStep(4, "Downloading Google MCP...");
+    r = Step_GitClone(projectRoot);
+    if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
+    PrintOk(r.msg);
+
+    // Step 5: npm install
+    PrintStep(5, "Installing dependencies (npm install)...");
     r = Step_NpmInstall(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 4
-    PrintStep(4, "Building MCP server (npm run build)...");
+    // Step 6: npm run build
+    PrintStep(6, "Building MCP server (npm run build)...");
     r = Step_NpmBuild(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 5
+    // Step 7: Handle key.json
+    // Accept key.json via drag-and-drop (argv[1]) or check if already in install dir
     fs::path keyPath;
     if (argc >= 2) {
         keyPath = argv[1];
@@ -658,10 +699,10 @@ int main(int argc, char* argv[])
         keyPath = projectRoot / "key.json";
     }
 
-    PrintStep(5, "Checking key.json...");
+    PrintStep(7, "Checking key.json...");
     r = Step_CheckKeyJson(projectRoot);
     if (!r.ok) {
-        PrintFail("key.json not found in project root.\n");
+        PrintFail("key.json not found in C:\\google-mcp.\n");
         Reset();
         std::cout << "\n"
             "  +--------------------------------------------+\n"
@@ -685,16 +726,15 @@ int main(int argc, char* argv[])
             "  7. Name it (e.g. 'Google MCP')\n"
             "  8. Download the JSON file\n"
             "  9. Rename it to 'key.json'\n"
-            "  10. Place it in the project root folder:\n\n"
-            "      " << projectRoot.string() << "\n\n"
-            "  Then drag key.json onto this installer and run it again.\n"
-            "  Or place key.json in the project root and run the installer.\n\n"
+            "  10. Place it in: C:\\google-mcp\\\n\n"
+            "  Or drag key.json onto this installer and run again.\n\n"
             "  Press any key to exit.\n";
         std::cin.get();
         return 1;
     }
     PrintOk(r.msg);
 
+    // Copy if dragged onto exe
     fs::path destKey = projectRoot / "key.json";
     if (fs::weakly_canonical(keyPath) != fs::weakly_canonical(destKey)) {
         r = Step_CopyKey(keyPath, destKey);
@@ -702,19 +742,19 @@ int main(int argc, char* argv[])
         PrintOk(r.msg);
     }
 
-    // Step 6
-    PrintStep(6, "Google OAuth setup...");
+    // Step 8: OAuth
+    PrintStep(8, "Google OAuth setup...");
     r = Step_OAuth(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 7
-    PrintStep(7, "Installing skills for Claude...");
+    // Step 9: Install skills
+    PrintStep(9, "Installing Claude skills...");
     r = Step_InstallSkills(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
 
-    // Step 8
+    // Step 10: Configure Claude Desktop
     Yellow();
     std::cout << "\n  Closing Claude Desktop (if running)...\n";
     Reset();
@@ -723,7 +763,7 @@ int main(int argc, char* argv[])
     std::cout << "  Claude Desktop closed.\n\n";
     Reset();
 
-    PrintStep(8, "Configuring Claude Desktop...");
+    PrintStep(10, "Configuring Claude Desktop...");
     r = Step_ConfigureClaude(projectRoot);
     if (!r.ok) { PrintFail(r.msg); std::cin.get(); return 1; }
     PrintOk(r.msg);
