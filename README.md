@@ -1,24 +1,34 @@
 # Google MCP Server
 
-A Model Context Protocol (MCP) server for Google Forms and Google Sheets. Create, manage, and automate Google Forms and Spreadsheets with 50 tools.
+A Model Context Protocol (MCP) server for Google Workspace. **279 tools** covering Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, and Drive Labels — all through a single, secure MCP server.
 
 ## Features
 
-- Create, copy, and delete Google Forms
-- Add 11 question types (text, paragraph, multiple choice, checkbox, dropdown, linear scale, date, time, rating, choice grid, file upload)
-- **Multi-section support** with `section` parameter on all content-adding tools
-- Set quiz grading with correct answers, point values, and feedback
-- Add page breaks, section headers, titles, images, and videos
-- Get form items with section breakdown, metadata, responses, and analytics
-- Share forms with specific people via email
-- List all your Google Forms
+- **279 tools** across 9 Google Workspace APIs
+- **Automatic OAuth2 re-authentication** — browser opens when tokens expire
+- **Auto-updates** from GitHub on every startup
+- **Claude skill installation** — tools are instantly available in Claude
 - Secure credential storage (no secrets in config files)
-- **Full Google Sheets support** — create, read, write, format spreadsheets, manage tabs, run formulas, and filter data  
+- Works with Claude Desktop, OpenCode, Kilo Code, Cline, and Cursor
+
+## Supported APIs
+
+| API | Tools | Key Capabilities |
+|-----|-------|------------------|
+| Google Drive | 35 | Files, folders, permissions, sharing, comments, revisions, shared drives |
+| Google Calendar | 26 | Events, calendars, free/busy, recurring events, ACL, ICS import |
+| Google Docs | 20 | Create, edit, format, tables, images, lists, find/replace, export |
+| Google Sheets | 47 | Cells, formulas, charts, pivot tables, validation, protection, metadata |
+| Google Slides | 34 | Presentations, slides, shapes, text, images, alignment, styling |
+| Google Forms | 44 | All question types, quizzes, sections, responses, analytics |
+| Google Classroom | 45 | Courses, assignments, submissions, grades, rosters, guardians |
+| Google Meet | 12 | Conferences, recordings, transcripts, Calendar integration |
+| Google Drive Labels | 24 | Labels, fields, options, application, revisions, permissions |
 
 ## Prerequisites
 
 - Node.js 18+ installed
-- Claude Desktop installed
+- Claude Desktop installed (or another MCP-compatible client)
 - A Google account
 
 ## Quick Setup
@@ -34,6 +44,7 @@ A Model Context Protocol (MCP) server for Google Forms and Google Sheets. Create
    - Run `npm install` and `npm run build`
    - Guide you through Google OAuth (opens browser)
    - Configure Claude Desktop automatically
+   - Install all skills for Claude
 4. Claude Desktop opens — you're ready to go
 
 **Auto-Updates:** Once installed, the MCP server checks for updates from GitHub every time Claude Desktop starts. If a new version is available, it pulls the latest code and rebuilds automatically in the background. No manual updates needed.
@@ -56,9 +67,15 @@ npm run build
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (e.g., "Google MCP")
 3. Enable these APIs:
-   - [Google Forms API](https://console.cloud.google.com/apis/library/forms.googleapis.com)
    - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+   - [Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)
+   - [Google Docs API](https://console.cloud.google.com/apis/library/docs.googleapis.com)
    - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+   - [Google Slides API](https://console.cloud.google.com/apis/library/slides.googleapis.com)
+   - [Google Forms API](https://console.cloud.google.com/apis/library/forms.googleapis.com)
+   - [Google Classroom API](https://console.cloud.google.com/apis/library/classroom.googleapis.com)
+   - [Google Meet API](https://console.cloud.google.com/apis/library/meet.googleapis.com)
+   - [Google Drive Labels API](https://console.cloud.google.com/apis/library/drivelabels.googleapis.com)
 4. Go to [Credentials](https://console.cloud.google.com/apis/credentials)
 5. Click "Create Credentials" > "OAuth client ID"
 6. Configure OAuth consent screen if prompted:
@@ -94,7 +111,7 @@ On first run, the server will:
 3. Open your browser for Google OAuth consent
 4. Save the refresh token to `token.json` automatically
 
-After this, `token.json` is saved and you never need to authenticate again.
+After this, `token.json` is saved and you never need to authenticate again. If tokens expire, the server automatically opens the browser for re-authentication.
 
 ### 5. Configure Your AI Client
 
@@ -118,7 +135,7 @@ After this, `token.json` is saved and you never need to authenticate again.
 }
 ```
 
-> **Note:** Claude Desktop uses `auto-update.js` which automatically checks for updates from GitHub on startup.
+> **Note:** Claude Desktop uses `auto-update.js` which automatically checks for updates from GitHub on startup and installs skills.
 
 #### OpenCode
 
@@ -191,213 +208,467 @@ Restart Claude Desktop / OpenCode / Kilo Code / Cline for the MCP to load.
 google-mcp/
   key.json           # Your Google OAuth client credentials (keep secret)
   token.json         # Auto-generated refresh token (keep secret)
+  auto-update.js     # Auto-update wrapper for Claude Desktop
   .gitignore         # Prevents secrets from being committed
   src/
-    index.ts         # MCP server
+    index.ts         # MCP server with modular architecture
     test-oauth.ts    # OAuth token test utility
+    services/
+      drive.ts       # Google Drive API (35 tools)
+      calendar.ts    # Google Calendar API (26 tools)
+      docs.ts        # Google Docs API (20 tools)
+      sheets.ts      # Google Sheets API (47 tools)
+      slides.ts      # Google Slides API (34 tools)
+      forms.ts       # Google Forms API (44 tools)
+      classroom.ts   # Google Classroom API (45 tools)
+      meet.ts        # Google Meet API (12 tools)
+      labels.ts      # Google Drive Labels API (24 tools)
+      api-utils.ts   # API error handling and enablement guidance
+  skills/
+    google-mcp/
+      SKILL.md       # Claude skill with all 279 tools
+  CPP/
+    installer.cpp    # Windows installer source
+    build.bat        # Build script for installer
   build/             # Compiled output
 ```
 
-## Available Tools (48)
+## Available Tools (279)
 
-### Form Management
-
-| Tool | Description |
-|------|-------------|
-| `create_form` | Create a new Google Form with title and optional description |
-| `copy_form` | Create a deep copy of an existing form including all items and sections |
-| `delete_form` | Delete a Google Form (requires Google Drive API enabled) |
-| `get_form` | Get full form structure and details |
-| `get_form_metadata` | Get form metadata including response count and settings |
-| `update_form_settings` | Configure quiz mode, collect emails, title, description |
-| `set_publish_settings` | Publish/unpublish form, accept/reject responses |
-| `set_form_description` | Set or update the form description |
-| `list_forms` | List all Google Forms you have access to |
-| `share_form` | Share a form with specific people via email |
-
-### Question Types
-
-All question tools accept an optional `section` parameter (1-indexed) to place the question in a specific section. Without `section`, items are appended to the last section.
+### Google Drive (35 tools)
 
 | Tool | Description |
 |------|-------------|
-| `add_text_question` | Add a short text answer question |
-| `add_paragraph_question` | Add a long text (paragraph) answer question |
-| `add_multiple_choice_question` | Add a multiple choice question (single answer) |
-| `add_checkbox_question` | Add a checkbox question (multiple answers allowed) |
-| `add_dropdown_question` | Add a dropdown selection question |
-| `add_linear_scale_question` | Add a linear scale question (e.g., 1-5 rating) |
-| `add_date_question` | Add a date picker question |
-| `add_time_question` | Add a time picker question |
-| `add_rating_question` | Add a star/heart/thumbs-up rating question (3-10 scale) |
-| `add_choice_grid` | Add a multiple choice grid (rows x columns) |
+| `list_drive_files` | List files with query, pagination, field filtering |
+| `get_drive_file` | Get file metadata by ID |
+| `create_drive_file` | Upload/create file with name, mime, parents |
+| `update_drive_file` | Update file metadata (name, description, parents) |
+| `delete_drive_file` | Delete or trash a file |
+| `copy_drive_file` | Copy a file to new location/name |
+| `download_drive_file` | Get file content/download URL |
+| `search_drive_files` | Full Drive query syntax search |
+| `create_drive_folder` | Create folder with parent |
+| `list_drive_folder_contents` | List contents of a folder |
+| `move_drive_file` | Move file to different parent(s) |
+| `add_drive_permission` | Add user/group/domain/anyone permission |
+| `list_drive_permissions` | List all permissions on a file |
+| `update_drive_permission` | Change permission role |
+| `remove_drive_permission` | Remove a permission |
+| `share_drive_file` | Quick share with email + role |
+| `add_drive_comment` | Add comment to file |
+| `list_drive_comments` | List comments on file |
+| `resolve_drive_comment` | Mark comment resolved |
+| `list_drive_revisions` | List file revisions |
+| `get_drive_revision` | Get specific revision |
+| `delete_drive_revision` | Delete a revision |
+| `star_drive_file` | Star/unstar a file |
+| `set_drive_file_properties` | Set custom app properties |
+| `list_shared_drives` | List all shared drives |
+| `get_shared_drive` | Get shared drive details |
+| `create_shared_drive` | Create new shared drive |
+| `delete_shared_drive` | Delete a shared drive |
+| `get_drive_about` | Get storage quota, user info |
+| `create_drive_shortcut` | Create shortcut to file |
+| `get_drive_shortcut_target` | Get shortcut target |
+| `export_drive_file` | Export Workspace file (PDF, DOCX, etc.) |
+| `batch_update_drive_files` | Batch update multiple files |
 
-### Question Management
-
-| Tool | Description |
-|------|-------------|
-| `get_form_items` | Get all items with IDs, types, and section assignments |
-| `update_question` | Update question title, required status, or choices |
-| `delete_question` | Delete a question from the form |
-| `reorder_items` | Move a question to a different position in the form |
-
-### Quiz Features
-
-| Tool | Description |
-|------|-------------|
-| `set_question_grading` | Set correct answers, point values, and feedback for graded questions |
-
-### Content
-
-All content tools accept an optional `section` parameter to place items in a specific section.
-
-| Tool | Description |
-|------|-------------|
-| `add_title_description` | Add a title and description text block |
-| `add_section_header` | Add a description/text block within a section |
-| `add_page_break` | Add a section break (creates a new section boundary) |
-| `add_image` | Add an image from a public URL |
-| `add_video` | Add a YouTube video with optional caption |
-
-### Responses & Analytics
+### Google Calendar (26 tools)
 
 | Tool | Description |
 |------|-------------|
-| `get_form_responses` | Get all form responses |
-| `get_responses_sheet` | Read responses from the linked Google Sheet |
-| `get_form_responses_analytics` | Get structured response data with question mapping and scores |
+| `list_calendars` | List all calendars |
+| `get_calendar` | Get calendar details |
+| `create_calendar` | Create new calendar |
+| `update_calendar` | Update summary/description |
+| `delete_calendar` | Delete a calendar |
+| `get_calendar_colors` | Get available colors |
+| `get_calendar_settings` | Get user settings |
+| `list_events` | List events with time range, query filter |
+| `get_event` | Get event details |
+| `create_event` | Create event with attendees, Meet link, recurrence |
+| `update_event` | Update event properties |
+| `delete_event` | Delete event |
+| `quick_add_event` | Create from natural language |
+| `move_event` | Move event to another calendar |
+| `watch_events` | Set up push notifications |
+| `update_recurring_event_instance` | Update single instance of recurring event |
+| `delete_recurring_event_instance` | Delete single instance |
+| `get_freebusy` | Query free/busy for calendars |
+| `get_calendar_list_freebusy` | Free/busy for all calendars |
+| `get_event_colors` | Get event color options |
+| `watch_calendar_list` | Watch for calendar changes |
+| `stop_channel` | Stop notification channel |
+| `list_calendar_acl` | List access control rules |
+| `add_calendar_acl` | Add access control rule |
+| `delete_calendar_acl` | Delete access control rule |
+| `import_event` | Import event from ICS |
 
-### Google Sheets — Spreadsheet Management
+**Event creation parameters:** summary, description, location, startDateTime, endDateTime, timeZone, attendees (array of emails), recurrence (RRULE strings), conferenceDataVersion (1 for Meet link), sendNotifications, transparency, visibility, colorId, reminders.
 
-| Tool | Description |
-|------|-------------|
-| `create_spreadsheet` | Create a new Google Spreadsheet |
-| `delete_spreadsheet` | Delete a Google Spreadsheet |
-| `get_spreadsheet` | Get spreadsheet metadata including sheet/tab list |
-| `list_spreadsheets` | List Google Spreadsheets accessible to the user |
-
-### Google Sheets — Tab Management
-
-| Tool | Description |
-|------|-------------|
-| `add_sheet` | Add a new sheet/tab to a spreadsheet |
-| `delete_sheet` | Delete a sheet/tab from a spreadsheet |
-| `rename_sheet` | Rename a sheet/tab in a spreadsheet |
-| `list_sheets` | List all sheets/tabs in a spreadsheet |
-
-### Google Sheets — Cell & Range Operations
-
-| Tool | Description |
-|------|-------------|
-| `read_range` | Read cell values from a range using A1 notation |
-| `write_range` | Write values to a range (overwrites existing data) |
-| `append_rows` | Append rows to the end of a range |
-| `clear_range` | Clear values in a range (keeps formatting) |
-
-### Google Sheets — Formatting
+### Google Docs (20 tools)
 
 | Tool | Description |
 |------|-------------|
-| `format_cells` | Apply formatting (bold, colors, alignment, font) to a range |
-| `merge_cells` | Merge a range of cells |
+| `docs_create_document` | Create new document |
+| `docs_get_document` | Get full document structure |
+| `docs_get_document_plain_text` | Get plain text only |
+| `docs_delete_document` | Delete document |
+| `docs_insert_text` | Insert text at index |
+| `docs_insert_paragraph` | Insert paragraph with styling |
+| `docs_insert_page_break` | Insert page break |
+| `docs_insert_table` | Insert table with rows/columns/cell content |
+| `docs_insert_image` | Insert image from URL |
+| `docs_insert_bullet_list` | Insert bulleted list |
+| `docs_insert_numbered_list` | Insert numbered list |
+| `docs_insert_named_range` | Create named range/bookmark |
+| `docs_update_paragraph_style` | Heading, alignment, indent, spacing |
+| `docs_update_text_format` | Bold, italic, underline, font, size, color |
+| `docs_delete_content_range` | Delete content in range |
+| `docs_merge_table_cells` | Merge table cells |
+| `docs_unmerge_table_cells` | Unmerge table cells |
+| `docs_find_and_replace` | Find/replace with options |
+| `docs_replace_all_text` | Replace all occurrences |
+| `docs_export_document` | Export as PDF/DOCX/HTML/TXT |
 
-### Google Sheets — Formulas & Queries
+**Document indices:** 0-based, index 0 = first position after document start. Use `endOfSegmentLocation: {}` to append at end.
+
+### Google Sheets (47 tools)
 
 | Tool | Description |
 |------|-------------|
-| `run_formula` | Execute a Google Sheets formula (FILTER, QUERY, VLOOKUP, SUMIF, etc.) and return the computed results |
-| `filter_sheet` | Filter spreadsheet rows by conditions (equals, contains, greater_than, etc.) — builds FILTER formulas behind the scenes |
+| `create_spreadsheet` | Create new spreadsheet |
+| `delete_spreadsheet` | Delete spreadsheet |
+| `get_spreadsheet` | Get spreadsheet details |
+| `list_spreadsheets` | List all spreadsheets |
+| `add_sheet` | Add new tab |
+| `delete_sheet` | Delete a tab |
+| `rename_sheet` | Rename a tab |
+| `list_sheets` | List all tabs |
+| `read_range` | Read cell values (A1 notation) |
+| `write_range` | Write values to range |
+| `append_rows` | Append rows after existing data |
+| `clear_range` | Clear range content |
+| `format_cells` | Apply formatting (bold, colors, borders, etc.) |
+| `merge_cells` | Merge cell range |
+| `run_formula` | Set a formula in a cell |
+| `filter_data` | Filter/sort data |
+| `create_chart` | Create chart (bar, line, pie, scatter, etc.) |
+| `update_chart` | Update chart spec |
+| `delete_chart` | Delete a chart |
+| `list_charts` | List all charts |
+| `add_conditional_format_rule` | Add conditional formatting |
+| `update_conditional_format_rule` | Update a rule |
+| `delete_conditional_format_rule` | Delete a rule |
+| `list_conditional_format_rules` | List all rules |
+| `add_data_validation` | Add data validation (list, checkbox, etc.) |
+| `update_data_validation` | Update validation rule |
+| `delete_data_validation` | Remove validation |
+| `list_data_validations` | List all validations |
+| `add_protected_range` | Protect a range |
+| `update_protected_range` | Update protection settings |
+| `delete_protected_range` | Remove protection |
+| `list_protected_ranges` | List protected ranges |
+| `add_developer_metadata` | Attach metadata |
+| `get_developer_metadata` | Get metadata |
+| `search_developer_metadata` | Search metadata |
+| `delete_developer_metadata` | Delete metadata |
+| `create_pivot_table` | Create pivot table with rows/columns/values |
+| `create_named_range` | Create named range |
+| `update_named_range` | Update named range |
+| `delete_named_range` | Delete named range |
+| `list_named_ranges` | List all named ranges |
+| `update_sheet_properties` | Update tab color, hide, grid, frozen |
+| `duplicate_sheet` | Duplicate a tab |
+| `copy_sheet` | Copy tab to another spreadsheet |
+| `move_sheet` | Move tab position |
+| `update_sheet_tab_color` | Set tab color (RGB) |
+| `batch_update_spreadsheet` | Execute raw batchUpdate |
+| `find_replace_sheet` | Find and replace (regex support) |
+| `sort_range` | Sort by columns |
+| `create_filter_view` | Create filter view |
+| `update_filter_view` | Update filter view |
+| `delete_filter_view` | Delete filter view |
+| `add_sparkline` | Add inline sparkline |
+| `create_data_source` | Create connected data source |
+| `list_data_sources` | List connected sources |
+| `add_slicer` | Add slicer UI element |
 
-## Multi-Section Support
+**Range format:** `Sheet1!A1:C3` or `A1:Z100` or `Sheet1!A:A`. `read_range` returns 2D array of values.
 
-The `section` parameter on question and content tools lets you place items in specific sections. Sections are created by `add_page_break`.
+### Google Slides (34 tools)
 
-### How It Works
+| Tool | Description |
+|------|-------------|
+| `slides_create_presentation` | Create new presentation |
+| `slides_get_presentation` | Get full presentation |
+| `slides_delete_presentation` | Delete presentation |
+| `slides_list_presentation_slides` | List all slides |
+| `slides_add_slide` | Add slide (by layout or blank) |
+| `slides_delete_slide` | Delete slide |
+| `slides_duplicate_slide` | Duplicate slide |
+| `slides_move_slide` | Move slide position |
+| `slides_get_slide` | Get slide details |
+| `slides_create_shape` | Create shape (rectangle, ellipse, etc.) |
+| `slides_create_text_box` | Create text box |
+| `slides_create_image` | Insert image from URL |
+| `slides_create_line` | Create line/arrow |
+| `slides_delete_element` | Delete element |
+| `slides_group_elements` | Group elements |
+| `slides_ungroup_elements` | Ungroup elements |
+| `slides_insert_text` | Insert text into element |
+| `slides_update_text_style` | Bold, italic, font, color |
+| `slides_update_paragraph_style` | Alignment, spacing, indent |
+| `slides_insert_table` | Insert table |
+| `slides_update_table_cell_properties` | Cell fill, borders, padding |
+| `slides_update_element_properties` | Position, size, rotation |
+| `slides_align_elements` | Align (left, center, right, top, middle, bottom) |
+| `slides_distribute_elements` | Distribute horizontally/vertically |
+| `slides_bring_to_front` | Bring to front (z-order) |
+| `slides_send_to_back` | Send to back (z-order) |
+| `slides_update_shape_fill` | Solid or gradient fill |
+| `slides_update_shape_border` | Border color, weight, dash |
+| `slides_update_shape_shadow` | Add/remove shadow |
+| `slides_create_from_template` | Copy presentation (template) |
+| `slides_replace_image` | Replace image in place |
+| `slides_refresh_sheets_chart` | Refresh linked chart |
+| `slides_export_presentation` | Export as PDF/PPTX |
+| `slides_set_slide_notes` | Set speaker notes |
+| `slides_get_slide_notes` | Get speaker notes |
 
-1. Create a form
-2. Add questions (they go to section 1 by default)
-3. Call `add_page_break` to create section 2
-4. Add more questions with `section: 2` to target section 2
-5. Call `get_form_items` to see which section each item belongs to
+**Units:** Use `unit: "inches"` (default), `"points"`, or `"EMU"`. 1 inch = 914400 EMUs = 72 points.
 
-### Example: Two-Section Form
+### Google Forms (44 tools)
 
+| Tool | Description |
+|------|-------------|
+| `create_form` | Create new form |
+| `copy_form` | Copy an existing form |
+| `delete_form` | Delete form |
+| `get_form` | Get full form details |
+| `get_form_metadata` | Get response count, revision |
+| `update_form_settings` | Update title, description, quiz mode |
+| `set_publish_settings` | Publish/unpublish, accept responses |
+| `set_form_description` | Update description |
+| `list_forms` | List forms from Drive |
+| `add_text_question` | Short answer text |
+| `add_paragraph_question` | Long answer paragraph |
+| `add_multiple_choice_question` | Multiple choice with options |
+| `add_checkbox_question` | Checkbox (multi-select) |
+| `add_dropdown_question` | Dropdown with options |
+| `add_linear_scale_question` | Linear scale (1-5, etc.) |
+| `add_date_question` | Date question |
+| `add_time_question` | Time question |
+| `add_rating_question` | Rating (star, heart, etc.) |
+| `add_file_upload_question` | File upload |
+| `add_choice_grid` | Grid question (rows x columns) |
+| `add_page_break` | Add page break |
+| `add_section_header` | Add section header |
+| `add_title_description` | Add title/description block |
+| `add_image` | Add image (URL or Drive) |
+| `add_video` | Add YouTube video |
+| `update_question` | Update question text/options |
+| `delete_question` | Delete a question |
+| `reorder_items` | Reorder form items |
+| `set_question_grading` | Set point value + correct answer |
+| `add_question_validation` | Add regex/number/text validation |
+| `add_question_option` | Add option to question |
+| `remove_question_option` | Remove option |
+| `shuffle_question_options` | Enable/disable shuffling |
+| `set_question_required` | Set required/optional |
+| `set_question_description` | Add helper text |
+| `get_form_responses` | Get all responses |
+| `get_responses_sheet` | Get linked spreadsheet URL |
+| `get_form_responses_analytics` | Quiz analytics + statistics |
+| `delete_all_responses` | Delete all responses |
+| `delete_response` | Delete specific response |
+| `share_form` | Share form with email |
+| `get_form_url` | Get view/edit/create URLs |
+| `watch_form_responses` | Poll for new responses |
+| `move_item` | Move question position |
+
+**Question options:** `options: ["Red", "Blue", "Green"]` for choice questions. Use `required: true/false`.
+
+### Google Classroom (45 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_courses` | List courses (teacher/student filter) |
+| `get_course` | Get course details |
+| `create_course` | Create new course |
+| `update_course` | Update course properties |
+| `delete_course` | Delete/archive course |
+| `update_course_state` | ACTIVE, ARCHIVED, PROVISIONED |
+| `list_announcements` | List announcements |
+| `get_announcement` | Get announcement details |
+| `create_announcement` | Create announcement |
+| `update_announcement` | Update announcement |
+| `delete_announcement` | Delete announcement |
+| `list_coursework` | List coursework items |
+| `get_coursework` | Get coursework details |
+| `create_coursework` | Create assignment/quiz/material |
+| `update_coursework` | Update coursework |
+| `delete_coursework` | Delete coursework |
+| `list_student_submissions` | List submissions |
+| `get_student_submission` | Get submission details |
+| `submit_student_submission` | Turn in submission |
+| `unsubmit_student_submission` | Unsubmit (return to NEW) |
+| `add_student_submission_attachment` | Add attachment |
+| `modify_attachments` | Modify attachments |
+| `return_student_submission` | Return to student with grade |
+| `reclaim_student_submission` | Teacher reclaims |
+| `grade_student_submission` | Set assigned/draft grade |
+| `list_topics` | List topics |
+| `create_topic` | Create topic |
+| `update_topic` | Update topic name |
+| `delete_topic` | Delete topic |
+| `list_invitations` | List pending invitations |
+| `create_invitation` | Invite student/teacher |
+| `accept_invitation` | Accept invitation |
+| `delete_invitation` | Revoke invitation |
+| `list_students` | List students in course |
+| `enroll_student` | Enroll student |
+| `remove_student` | Remove student |
+| `list_teachers` | List teachers |
+| `add_teacher` | Add teacher |
+| `remove_teacher` | Remove teacher |
+| `list_course_materials` | List materials |
+| `get_course_material` | Get material details |
+| `list_guardians` | List guardian relationships |
+| `get_guardian` | Get guardian details |
+| `create_guardian` | Create guardian link |
+| `delete_guardian` | Remove guardian |
+
+**Course states:** `ACTIVE`, `ARCHIVED`, `PROVISIONED`, `DECLINED`
+**Submission states:** `NEW`, `CREATED`, `TURNED_IN`, `RETURNED`, `RECLAIMED_BY_STUDENT`
+**Roles:** `STUDENT`, `TEACHER`
+
+### Google Meet (12 tools)
+
+| Tool | Description |
+|------|-------------|
+| `create_meeting_space` | Create Meet conference |
+| `get_meeting_space` | Get conference details |
+| `list_meetings` | List meetings from Calendar |
+| `delete_meeting_space` | End/delete conference |
+| `get_meeting_participants` | List participants |
+| `list_meeting_records` | List recordings/transcripts |
+| `get_meeting_record` | Get meeting record |
+| `get_meeting_recording` | Get recording info |
+| `get_meeting_transcript` | Get transcript info |
+| `create_meeting_event` | Create calendar event + Meet link |
+| `get_meeting_from_event` | Extract Meet from calendar event |
+| `update_meeting_access` | Modify access type (OPEN, TRUSTED, RESTRICTED) |
+
+### Google Drive Labels (24 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_drive_labels` | List all labels |
+| `get_drive_label` | Get label details |
+| `create_drive_label` | Create new label |
+| `update_drive_label` | Update label (title, state) |
+| `delete_drive_label` | Delete label |
+| `disable_drive_label` | Disable label (read-only) |
+| `enable_drive_label` | Enable label |
+| `add_label_field` | Add field (TEXT, INT, SELECTION, DATE, USER, EMAIL) |
+| `update_label_field` | Update field properties |
+| `delete_label_field` | Remove field |
+| `add_label_field_option` | Add selection option |
+| `update_label_field_option` | Update option |
+| `delete_label_field_option` | Delete option |
+| `reorder_label_field_options` | Reorder options |
+| `apply_label_to_file` | Apply label with field values to file |
+| `remove_label_from_file` | Remove label from file |
+| `update_label_values_on_file` | Update applied label values |
+| `list_file_labels` | List labels on file |
+| `get_file_label` | Get specific label on file |
+| `list_label_revisions` | List label definition revisions |
+| `get_label_revision` | Get specific revision |
+| `disable_label_revision` | Disable revision |
+| `get_label_permissions` | Get who can use label |
+| `update_label_permissions` | Update permissions |
+
+**Field types:** `TEXT` (string), `INTEGER` (number), `SELECTION` (options), `DATE` (year/month/day), `USER` (user email), `EMAIL` (email address).
+
+## Quick Workflows
+
+### Share a file
 ```
-1. create_form with title "Survey"
-2. add_text_question with questionTitle "Name", section omitted (goes to section 1)
-3. add_page_break with title "Part 2"
-4. add_multiple_choice_question with questionTitle "Rating", options ["1","2","3"], section: 2
-5. get_form_items - verify items are in correct sections
+share_drive_file { fileId: "xxx", email: "user@example.com", role: "writer" }
 ```
 
-### Section Numbering
-
-- Sections are 1-indexed (section 1, section 2, etc.)
-- If `section` exceeds the total number of sections, the item appends to the last section
-- If `section` is omitted, the item appends to the last section
-- `get_form_items` returns `totalSections` and a `sections` array with start indices
-
-## Usage Examples
-
-### Create a Simple Form
-
+### Create event with Meet link
 ```
-Create a contact form with:
-- Name (text, required)
-- Email (text, required)
-- Message (paragraph, required)
-- How did you find us? (dropdown: Google, Social Media, Friend, Other)
+create_event {
+  summary: "Team Sync",
+  startDateTime: "2026-06-30T10:00:00Z",
+  endDateTime: "2026-06-30T10:30:00Z",
+  timeZone: "America/New_York",
+  attendees: ["alice@example.com"],
+  conferenceDataVersion: 1
+}
 ```
 
-### Create a Multi-Section Quiz
-
+### Write to spreadsheet
 ```
-Create a JavaScript quiz with:
-- Title: "JavaScript Basics Quiz"
-- Enable quiz mode
-- Section 1: "Fundamentals"
-  - What is 2 + 2? (multiple choice: 3, 4, 5, 6 - correct: 4, 10 points)
-  - Which are JS data types? (checkbox: String, Number, Boolean, Python - correct: String, Number, Boolean, 10 points)
-- Section 2: "Advanced"
-  - Explain closures (paragraph)
-  - Rate this quiz (rating, 1-5 stars)
+write_range {
+  spreadsheetId: "xxx",
+  range: "Sheet1!A1:C3",
+  values: [["Name","Score"],["Alice","95"],["Bob","87"]]
+}
 ```
 
-### Create a Survey with Sections
-
+### Create doc with content
 ```
-Create a customer feedback form with 3 sections:
-- Section 1 "About You": Name (text), Email (text)
-- Section 2 "Experience": Satisfaction (linear scale 1-5), Date of visit (date)
-- Section 3 "Feedback": Comments (paragraph), Would recommend? (multiple choice: Yes/No)
+docs_create_document { title: "Report" }
+→ docs_insert_text { documentId: "...", text: "Introduction\n", index: 0 }
+→ docs_insert_table { documentId: "...", rows: 3, columns: 2 }
+```
+
+### Build a form
+```
+create_form { title: "Feedback" }
+→ add_text_question { formId: "...", title: "Name", required: true }
+→ add_multiple_choice_question { formId: "...", title: "Rating", options: ["Excellent","Good","Fair"] }
+```
+
+### Course + assignment
+```
+create_course { name: "Math 101", section: "Fall 2026" }
+→ create_coursework { courseId: "...", title: "HW 1", workType: "ASSIGNMENT", maxPoints: 100 }
+```
+
+### Apply label to file
+```
+apply_label_to_file {
+  fileId: "xxx",
+  labelId: "yyy",
+  fieldValues: { "field1": "Approved", "field2": "2026-06-29" }
+}
 ```
 
 ## Troubleshooting
 
 ### "Server disconnected" error
-
 - Check that the path to `build/index.js` is correct in your config
 - Check that Node.js is installed and in your PATH
 
-### "Google Forms API has not been used" error
+### "Google API has not been used" error
+Enable the required API at: `https://console.cloud.google.com/apis/library/{api-name}`
 
-Enable the Forms API at: https://console.cloud.google.com/apis/library/forms.googleapis.com
-
-### "Google Drive API has not been used" error
-
-Enable the Drive API at: https://console.cloud.google.com/apis/library/drive.googleapis.com
+The installer will guide you through enabling all required APIs.
 
 ### "No key.json found" error
-
 Place your downloaded Google credentials file as `key.json` in the project root.
 
 ### "Authentication failed" error
+The server automatically handles re-authentication. If it fails:
+1. Delete `token.json`
+2. Run `npm start` or restart Claude Desktop
 
-Delete `token.json` and run `npm start` again to re-authenticate.
-
-### Questions go to wrong section
-
-Use `get_form_items` to check section numbering. The `section` parameter is 1-indexed. If you specify a section number that doesn't exist, items append to the last section.
+### Token expired / revoked
+The server automatically detects expired tokens and opens the browser for re-authentication. No manual intervention needed.
 
 ## License
 
