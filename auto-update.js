@@ -61,10 +61,13 @@ function copySkills() {
     const skillsDir = join(homedir(), '.openclaude', 'skills');
     mkdirSync(skillsDir, { recursive: true });
 
-    // Copy google-mcp skill
-    const gmSrc = join(__dirname, 'skills', 'google-mcp');
-    if (existsSync(gmSrc)) {
-      cpSync(gmSrc, join(skillsDir, 'google-mcp'), { recursive: true });
+    // Copy google-mcp skill (case-insensitive search for Skills or skills)
+    const gmSrc = join(__dirname, 'Skills', 'google-mcp');
+    const gmSrcAlt = join(__dirname, 'skills', 'google-mcp');
+    const src = existsSync(gmSrc) ? gmSrc : existsSync(gmSrcAlt) ? gmSrcAlt : null;
+    if (src) {
+    if (src) {
+      cpSync(src, join(skillsDir, 'google-mcp'), { recursive: true });
       log('Copied google-mcp skill.');
     }
   } catch (err) {
