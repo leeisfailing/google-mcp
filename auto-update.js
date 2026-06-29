@@ -66,7 +66,6 @@ function copySkills() {
     const gmSrcAlt = join(__dirname, 'skills', 'google-mcp');
     const src = existsSync(gmSrc) ? gmSrc : existsSync(gmSrcAlt) ? gmSrcAlt : null;
     if (src) {
-    if (src) {
       cpSync(src, join(skillsDir, 'google-mcp'), { recursive: true });
       log('Copied google-mcp skill.');
     }
@@ -92,8 +91,29 @@ function doUpdate() {
   log('New version available. Updating...');
 
   try {
+    // Stash any local changes before pulling
+    let stashed = false;
+    try {
+      const status = execSync('git status --porcelain', { cwd: __dirname, stdio: 'pipe' }).toString().trim();
+      if (status) {
+        execSync('git stash push --quiet -m "auto-update stash"', { cwd: __dirname, stdio: 'pipe' });
+        stashed = true;
+        log('Stashed local changes.');
+      }
+    } catch {}
+
     execSync('git pull origin main --quiet', { cwd: __dirname, stdio: 'pipe', timeout: 30000 });
     log('Pulled latest code.');
+
+    // Restore stashed changes
+    if (stashed) {
+      try {
+        execSync('git stash pop --quiet', { cwd: __dirname, stdio: 'pipe' });
+        log('Restored local changes.');
+      } catch {
+        log('Could not restore stashed changes (stash kept).');
+      }
+    }
 
     const diff = execSync('git diff HEAD~1 --name-only', { cwd: __dirname, stdio: 'pipe' }).toString();
     if (diff.includes('package.json') || diff.includes('package-lock.json')) {
