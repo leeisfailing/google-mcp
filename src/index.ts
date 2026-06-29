@@ -23,6 +23,7 @@ import * as slidesService from './services/slides.js';
 import * as classroomService from './services/classroom.js';
 import * as meetService from './services/meet.js';
 import * as labelsService from './services/labels.js';
+import * as gmailService from './services/gmail.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,6 +67,13 @@ const SCOPES = [
   // Meet
   'https://www.googleapis.com/auth/meetings.space.created',
   'https://www.googleapis.com/auth/meetings.space.readonly',
+  // Gmail
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.labels',
+  'https://www.googleapis.com/auth/gmail.settings.basic',
+  'https://www.googleapis.com/auth/gmail.settings.sharing',
 ];
 
 // ---------------------------------------------------------------------------
@@ -376,6 +384,7 @@ class GoogleMCPServer {
       classroomService,
       meetService,
       labelsService,
+      gmailService,
     ];
 
     // Build the tool -> service registry
@@ -508,6 +517,19 @@ class GoogleMCPServer {
   // ---------------------------------------------------------------------------
 
   private async executeTool(name: string, args: any) {
+    // Normalize: accept `title` as alias for `questionTitle` on question tools
+    if (
+      args?.title &&
+      !args.questionTitle &&
+      name.startsWith('add_') &&
+      name !== 'add_page_break' &&
+      name !== 'add_section_header' &&
+      name !== 'add_title_description' &&
+      name !== 'add_image' &&
+      name !== 'add_video'
+    ) {
+      args = { ...args, questionTitle: args.title };
+    }
     const service = this.toolRegistry.get(name);
     if (!service) {
       throw new McpError(

@@ -16,6 +16,7 @@ const API_ENABLEMENT_MESSAGES: Record<string, string> = {
   'Google Forms API has not been used in project': 'Google Forms API',
   'Google Meet API has not been used in project': 'Google Meet API',
   'Google Drive Labels API has not been used in project': 'Google Drive Labels API',
+  'Gmail API has not been used in project': 'Gmail API',
   'Admin SDK API has not been used in project': 'Admin SDK API',
 };
 
@@ -29,6 +30,7 @@ const API_DASHBOARDS: Record<string, string> = {
   'Google Forms API': 'https://console.cloud.google.com/apis/library/forms.googleapis.com',
   'Google Meet API': 'https://console.cloud.google.com/apis/library/meet.googleapis.com',
   'Google Drive Labels API': 'https://console.cloud.google.com/apis/library/drivelabels.googleapis.com',
+  'Gmail API': 'https://console.cloud.google.com/apis/library/gmail.googleapis.com',
   'Admin SDK API': 'https://console.cloud.google.com/apis/library/admin.googleapis.com',
 };
 
@@ -351,6 +353,44 @@ const TOOL_TO_API: Record<string, string> = {
   'disable_label_revision': 'Google Drive Labels API',
   'get_label_permissions': 'Google Drive Labels API',
   'update_label_permissions': 'Google Drive Labels API',
+
+  // Gmail
+  'gmail_': 'Gmail API',
+  'list_messages': 'Gmail API',
+  'get_message': 'Gmail API',
+  'get_message_raw': 'Gmail API',
+  'send_message': 'Gmail API',
+  'reply_to_message': 'Gmail API',
+  'forward_message': 'Gmail API',
+  'trash_message': 'Gmail API',
+  'untrash_message': 'Gmail API',
+  'delete_message': 'Gmail API',
+  'modify_message': 'Gmail API',
+  'batch_modify_messages': 'Gmail API',
+  'batch_delete_messages': 'Gmail API',
+  'list_drafts': 'Gmail API',
+  'get_draft': 'Gmail API',
+  'create_draft': 'Gmail API',
+  'update_draft': 'Gmail API',
+  'delete_draft': 'Gmail API',
+  'send_draft': 'Gmail API',
+  'list_labels': 'Gmail API',
+  'get_label': 'Gmail API',
+  'create_label': 'Gmail API',
+  'update_label': 'Gmail API',
+  'delete_label': 'Gmail API',
+  'list_threads': 'Gmail API',
+  'get_thread': 'Gmail API',
+  'trash_thread': 'Gmail API',
+  'untrash_thread': 'Gmail API',
+  'delete_thread': 'Gmail API',
+  'modify_thread': 'Gmail API',
+  'get_attachment': 'Gmail API',
+  'list_filters': 'Gmail API',
+  'create_filter': 'Gmail API',
+  'delete_filter': 'Gmail API',
+  'get_auto_reply': 'Gmail API',
+  'set_auto_reply': 'Gmail API',
 };
 
 /**

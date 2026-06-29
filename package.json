@@ -1,12 +1,13 @@
 {
   "name": "google-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for Google Forms integration",
+  "version": "1.0.0",
+  "description": "MCP server for Google Workspace (330 tools across 10 APIs: Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, Labels, Gmail)",
   "type": "module",
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
+    "typecheck": "tsc --noEmit",
     "test-oauth": "tsc && node build/test-oauth.js"
   },
   "dependencies": {

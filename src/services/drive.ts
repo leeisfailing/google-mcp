@@ -628,7 +628,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         const res = await drive.files.list({
           q: args.q,
           fields: args.fields || 'files(id, name, mimeType, size, createdTime, modifiedTime, parents, webViewLink), nextPageToken',
-          orderBy: args.orderBy || 'relevance',
+          orderBy: args.orderBy || undefined,
           pageSize: args.pageSize || 20,
           pageToken: args.pageToken || undefined,
           includeItemsFromAllDrives: true,
@@ -820,11 +820,17 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         if (!args.fileId) throw new McpError(ErrorCode.InvalidParams, 'fileId is required');
         if (!args.commentId) throw new McpError(ErrorCode.InvalidParams, 'commentId is required');
 
+        // First get the existing comment content (required by the API)
+        const existing = await drive.comments.get({
+          fileId: args.fileId,
+          commentId: args.commentId,
+          fields: 'id, content',
+        });
         const resolved = args.resolved !== false;
         const res = await drive.comments.update({
           fileId: args.fileId,
           commentId: args.commentId,
-          requestBody: { resolved },
+          requestBody: { resolved, content: existing.data.content || '' },
           fields: 'id, content, resolved',
         });
         return ok(res.data);
@@ -836,7 +842,6 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
 
         const res = await drive.revisions.list({
           fileId: args.fileId,
-          fields: args.fields || 'revisions(id, modifiedTime, size, mimeType, keptForever)',
         });
         return ok({ revisions: res.data.revisions || [] });
       }

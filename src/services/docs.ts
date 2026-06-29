@@ -359,7 +359,7 @@ export function getTools(): ToolDefinition[] {
     // === Export ===
     {
       name: 'docs_export_document',
-      description: 'Export a Google Docs document to various formats (PDF, DOCX, HTML, TXT, ODT). Returns base64-encoded content.',
+      description: 'Export a Google Docs document to various formats (PDF, DOCX, HTML, TXT, ODT, MARKDOWN). Returns base64-encoded content.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -367,7 +367,7 @@ export function getTools(): ToolDefinition[] {
           format: {
             type: 'string',
             description: 'Export format',
-            enum: ['PDF', 'DOCX', 'HTML', 'TXT', 'ODT', 'RTF', 'EPUB'],
+            enum: ['PDF', 'DOCX', 'HTML', 'TXT', 'ODT', 'RTF', 'EPUB', 'MARKDOWN'],
           },
         },
         required: ['documentId', 'format'],
@@ -765,19 +765,11 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         }
 
         // Add size if specified
-        if (args.width && args.height) {
-          insertImageRequest.insertImage = {
-            location: {
-              segmentId,
-              index: args.index ?? -1,
-            },
-            uri: args.imageUrl,
-            objectSize: {
-              width: { magnitude: args.width, unit: 'PT' },
-              height: { magnitude: args.height, unit: 'PT' },
-            },
+        if (args.width && args.height && insertImageRequest.insertInlineImage) {
+          insertImageRequest.insertInlineImage.objectSize = {
+            width: { magnitude: args.width, unit: 'PT' },
+            height: { magnitude: args.height, unit: 'PT' },
           };
-          delete insertImageRequest.insertInlineImage;
         }
 
         const res = await docs.documents.batchUpdate({
@@ -984,6 +976,8 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         }
 
         const segmentId = args.segmentId ?? '';
+        // Clamp startIndex to minimum 2 to avoid first section break
+        const startIndex = Math.max(args.startIndex, 2);
         const paragraphStyle: any = {};
         const styleFields: string[] = [];
 
@@ -1036,7 +1030,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
                 updateParagraphStyle: {
                   range: {
                     segmentId,
-                    startIndex: args.startIndex,
+                    startIndex,
                     endIndex: args.endIndex,
                   },
                   paragraphStyle,
@@ -1050,7 +1044,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         return ok({
           success: true,
           documentId: args.documentId,
-          startIndex: args.startIndex,
+          startIndex,
           endIndex: args.endIndex,
           updatedFields: styleFields,
           replies: res.data.replies,
@@ -1064,6 +1058,8 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         }
 
         const segmentId = args.segmentId ?? '';
+        // Clamp startIndex to minimum 2 to avoid first section break
+        const startIndex = Math.max(args.startIndex, 2);
         const textStyle: any = {};
         const styleFields: string[] = [];
 
@@ -1120,7 +1116,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
                 updateTextStyle: {
                   range: {
                     segmentId,
-                    startIndex: args.startIndex,
+                    startIndex,
                     endIndex: args.endIndex,
                   },
                   textStyle,
@@ -1134,7 +1130,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         return ok({
           success: true,
           documentId: args.documentId,
-          startIndex: args.startIndex,
+          startIndex,
           endIndex: args.endIndex,
           updatedFields: styleFields,
           replies: res.data.replies,
@@ -1199,6 +1195,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
                       rowIndex: args.rowStartIndex,
                       columnIndex: args.columnStartIndex,
                       tableStartLocation: {
+                        segmentId: '',
                         index: args.tableStartIndex,
                       },
                     },
@@ -1280,27 +1277,20 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         if (!args.findText) throw new McpError(ErrorCode.InvalidParams, 'findText is required');
         if (args.replaceText === undefined) throw new McpError(ErrorCode.InvalidParams, 'replaceText is required');
 
-        const findReplaceRequest: any = {
-          findReplace: {
-            findText: args.findText,
+        const replaceAllRequest: any = {
+          replaceAllText: {
+            containsText: {
+              text: args.findText,
+              matchCase: args.matchCase ?? false,
+            },
             replaceText: args.replaceText,
           },
         };
 
-        if (args.matchCase) {
-          findReplaceRequest.findReplace.matchCase = true;
-        }
-        if (args.matchEntireWord) {
-          findReplaceRequest.findReplace.matchEntireWord = true;
-        }
-        if (args.useRegex) {
-          findReplaceRequest.findReplace.useRegex = true;
-        }
-
         const res = await docs.documents.batchUpdate({
           documentId: args.documentId,
           requestBody: {
-            requests: [findReplaceRequest],
+            requests: [replaceAllRequest],
           },
         });
 
@@ -1364,11 +1354,12 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           'ODT': 'application/vnd.oasis.opendocument.text',
           'RTF': 'application/rtf',
           'EPUB': 'application/epub+zip',
+          'MARKDOWN': 'text/markdown',
         };
 
         const mimeType = formatMap[args.format.toUpperCase()];
         if (!mimeType) {
-          throw new McpError(ErrorCode.InvalidParams, `Unsupported format: ${args.format}. Supported: PDF, DOCX, HTML, TXT, ODT, RTF, EPUB`);
+          throw new McpError(ErrorCode.InvalidParams, `Unsupported format: ${args.format}. Supported: PDF, DOCX, HTML, TXT, ODT, RTF, EPUB, MARKDOWN`);
         }
 
         const response = await drive.files.export(

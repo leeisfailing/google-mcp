@@ -798,10 +798,29 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         const form = formResponse.data;
         const newTitle = args.newTitle || `${form.info?.title || 'Untitled Form'} (Copy)`;
         const newForm: any = {
-          info: { title: newTitle, documentTitle: newTitle, description: form.info?.description || '' },
+          info: { title: newTitle },
         };
         const createResponse = await forms.forms.create({ requestBody: newForm });
         const newFormId = createResponse.data.formId;
+
+        // Copy description and documentTitle via batchUpdate (can't set on create)
+        try {
+          await forms.forms.batchUpdate({
+            formId: newFormId!,
+            requestBody: {
+              requests: [
+                {
+                  updateFormInfo: {
+                    info: { description: form.info?.description || '', title: newTitle },
+                    updateMask: 'description',
+                  },
+                },
+              ],
+            },
+          });
+        } catch (e) {
+          console.error('Failed to copy form description:', e);
+        }
 
         // Copy settings
         if (form.settings) {
@@ -825,17 +844,23 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           }
         }
 
-        // Copy items
+        // Copy items (skip image items — images require valid source URIs that can't be re-created)
+        const copiedItems: any[] = [];
         if (form.items && form.items.length > 0) {
-          const createItemRequests = form.items.map((item: any, index: number) => {
+          for (let index = 0; index < form.items.length; index++) {
+            const item = form.items[index];
+            if (item.imageItem) {
+              console.warn(`Skipping image item "${item.title || ''}" at index ${index} — cannot copy images`);
+              continue;
+            }
             const { itemId, ...itemWithoutId } = item;
             if (itemWithoutId.questionItem?.question?.questionId) {
               delete itemWithoutId.questionItem.question.questionId;
             }
-            return { createItem: { item: itemWithoutId, location: { index } } };
-          });
-          for (let i = 0; i < createItemRequests.length; i += 50) {
-            const batch = createItemRequests.slice(i, i + 50);
+            copiedItems.push({ createItem: { item: itemWithoutId, location: { index: copiedItems.length } } });
+          }
+          for (let i = 0; i < copiedItems.length; i += 50) {
+            const batch = copiedItems.slice(i, i + 50);
             await forms.forms.batchUpdate({ formId: newFormId!, requestBody: { requests: batch } });
           }
         }
@@ -1713,73 +1738,10 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
 
     // ── 30. add_question_validation ───────────────────────────────────
     case 'add_question_validation': {
-      if (!args.formId || !args.itemId || !args.validationType) {
-        throw new McpError(ErrorCode.InvalidParams, 'Form ID, item ID, and validationType are required');
-      }
-
-      try {
-        const form = await forms.forms.get({ formId: args.formId });
-        const items = form.data.items || [];
-        const itemIndex = items.findIndex((item: any) => item.itemId === args.itemId);
-        if (itemIndex === -1) throw new McpError(ErrorCode.InvalidParams, `Item with ID ${args.itemId} not found`);
-
-        const item = items[itemIndex];
-        if (!item.questionItem || !item.questionItem.question) {
-          throw new McpError(ErrorCode.InvalidParams, `Item ${args.itemId} is not a question`);
-        }
-
-        const question = { ...item.questionItem.question };
-        const textQuestion = question.textQuestion;
-        if (!textQuestion) {
-          throw new McpError(ErrorCode.InvalidParams, 'Validation can only be added to text questions');
-        }
-
-        const updatedTextQuestion = { ...textQuestion };
-        const validation: any = {};
-
-        if (args.validationType === 'regex') {
-          if (!args.regex || !args.regex.pattern) throw new McpError(ErrorCode.InvalidParams, 'regex.pattern is required for regex validation');
-          validation.type = 'REGEX';
-          validation.regex = { hasErrorText: args.regex.hasErrorText || false };
-          if (args.customErrorText) validation.regex.errorText = args.customErrorText;
-        } else if (args.validationType === 'number') {
-          if (!args.number || !args.number.numberType) throw new McpError(ErrorCode.InvalidParams, 'number.numberType is required for number validation');
-          validation.type = 'NUMBER';
-          const numVal: any = { numberType: args.number.numberType };
-          if (args.number.value !== undefined) numVal.value = args.number.value;
-          if (args.number.maxValue !== undefined) numVal.maxValue = args.number.maxValue;
-          validation.number = numVal;
-        } else if (args.validationType === 'text') {
-          if (!args.text || !args.text.type) throw new McpError(ErrorCode.InvalidParams, 'text.type is required for text validation');
-          validation.type = 'TEXT';
-          validation.text = { type: args.text.type };
-          if (args.text.value !== undefined) validation.text.value = args.text.value;
-        } else {
-          throw new McpError(ErrorCode.InvalidParams, 'validationType must be regex, number, or text');
-        }
-
-        (updatedTextQuestion as any).validation = validation;
-        question.textQuestion = updatedTextQuestion;
-
-        await forms.forms.batchUpdate({
-          formId: args.formId,
-          requestBody: {
-            requests: [{
-              updateItem: {
-                item: { itemId: args.itemId, title: item.title, questionItem: { question } },
-                location: { index: itemIndex },
-                updateMask: 'questionItem.question.textQuestion.validation',
-              },
-            }],
-          },
-        });
-
-        return ok({ success: true, message: 'Question validation added successfully', itemId: args.itemId, validationType: args.validationType });
-      } catch (error: any) {
-        if (error instanceof McpError) throw error;
-        console.error('Error adding question validation:', error);
-        throw new McpError(ErrorCode.InternalError, `Failed to add question validation: ${error.message}`);
-      }
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'The Google Forms API does not support setting question validation programmatically. Validation can only be configured in the Google Forms UI.'
+      );
     }
 
     // ── 31. add_question_option ───────────────────────────────────────

@@ -1,10 +1,10 @@
 # Google MCP Server
 
-A Model Context Protocol (MCP) server for Google Workspace. **279 tools** covering Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, and Drive Labels — all through a single, secure MCP server.
+A Model Context Protocol (MCP) server for Google Workspace. **330 tools** covering Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, Drive Labels, and Gmail — all through a single, secure MCP server.
 
 ## Features
 
-- **279 tools** across 9 Google Workspace APIs
+- **330 tools** across 10 Google Workspace APIs
 - **Automatic OAuth2 re-authentication** — browser opens when tokens expire
 - **Auto-updates** from GitHub on every startup
 - **Claude skill installation** — tools are instantly available in Claude
@@ -15,15 +15,16 @@ A Model Context Protocol (MCP) server for Google Workspace. **279 tools** coveri
 
 | API | Tools | Key Capabilities |
 |-----|-------|------------------|
-| Google Drive | 35 | Files, folders, permissions, sharing, comments, revisions, shared drives |
+| Google Drive | 33 | Files, folders, permissions, sharing, comments, revisions, shared drives |
 | Google Calendar | 26 | Events, calendars, free/busy, recurring events, ACL, ICS import |
 | Google Docs | 20 | Create, edit, format, tables, images, lists, find/replace, export |
-| Google Sheets | 47 | Cells, formulas, charts, pivot tables, validation, protection, metadata |
-| Google Slides | 34 | Presentations, slides, shapes, text, images, alignment, styling |
+| Google Sheets | 56 | Cells, formulas, charts, pivot tables, validation, protection, metadata, sparklines, slicers |
+| Google Slides | 35 | Presentations, slides, shapes, text, images, alignment, styling |
 | Google Forms | 44 | All question types, quizzes, sections, responses, analytics |
 | Google Classroom | 45 | Courses, assignments, submissions, grades, rosters, guardians |
 | Google Meet | 12 | Conferences, recordings, transcripts, Calendar integration |
 | Google Drive Labels | 24 | Labels, fields, options, application, revisions, permissions |
+| Gmail | 33 | Messages, drafts, labels, threads, attachments, filters, auto-reply |
 
 ## Prerequisites
 
@@ -76,6 +77,7 @@ npm run build
    - [Google Classroom API](https://console.cloud.google.com/apis/library/classroom.googleapis.com)
    - [Google Meet API](https://console.cloud.google.com/apis/library/meet.googleapis.com)
    - [Google Drive Labels API](https://console.cloud.google.com/apis/library/drivelabels.googleapis.com)
+   - [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com)
 4. Go to [Credentials](https://console.cloud.google.com/apis/credentials)
 5. Click "Create Credentials" > "OAuth client ID"
 6. Configure OAuth consent screen if prompted:
@@ -214,28 +216,29 @@ google-mcp/
     index.ts         # MCP server with modular architecture
     test-oauth.ts    # OAuth token test utility
     services/
-      drive.ts       # Google Drive API (35 tools)
+      drive.ts       # Google Drive API (33 tools)
       calendar.ts    # Google Calendar API (26 tools)
       docs.ts        # Google Docs API (20 tools)
-      sheets.ts      # Google Sheets API (47 tools)
-      slides.ts      # Google Slides API (34 tools)
+      sheets.ts      # Google Sheets API (56 tools)
+      slides.ts      # Google Slides API (35 tools)
       forms.ts       # Google Forms API (44 tools)
       classroom.ts   # Google Classroom API (45 tools)
       meet.ts        # Google Meet API (12 tools)
       labels.ts      # Google Drive Labels API (24 tools)
+      gmail.ts       # Gmail API (33 tools)
       api-utils.ts   # API error handling and enablement guidance
   skills/
     google-mcp/
-      SKILL.md       # Claude skill with all 279 tools
+      SKILL.md       # Claude skill with all 330 tools
   CPP/
     installer.cpp    # Windows installer source
     build.bat        # Build script for installer
   build/             # Compiled output
 ```
 
-## Available Tools (279)
+## Available Tools (330)
 
-### Google Drive (35 tools)
+### Google Drive (33 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -333,7 +336,7 @@ google-mcp/
 
 **Document indices:** 0-based, index 0 = first position after document start. Use `endOfSegmentLocation: {}` to append at end.
 
-### Google Sheets (47 tools)
+### Google Sheets (56 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -396,7 +399,7 @@ google-mcp/
 
 **Range format:** `Sheet1!A1:C3` or `A1:Z100` or `Sheet1!A:A`. `read_range` returns 2D array of values.
 
-### Google Slides (34 tools)
+### Google Slides (35 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -590,6 +593,48 @@ google-mcp/
 | `update_label_permissions` | Update permissions |
 
 **Field types:** `TEXT` (string), `INTEGER` (number), `SELECTION` (options), `DATE` (year/month/day), `USER` (user email), `EMAIL` (email address).
+
+### Gmail (33 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_messages` | List messages with query, labels, pagination |
+| `get_message` | Get full message with headers, body, metadata |
+| `get_message_raw` | Get raw MIME content of a message |
+| `send_message` | Send email (structured or raw MIME) with attachments |
+| `reply_to_message` | Reply to a message (auto-sets In-Reply-To, Re: prefix) |
+| `forward_message` | Forward a message with optional prepended text |
+| `trash_message` | Move message to trash |
+| `untrash_message` | Remove message from trash |
+| `delete_message` | Permanently delete (bypasses trash) |
+| `modify_message` | Add/remove labels from a message |
+| `batch_modify_messages` | Modify labels on multiple messages at once |
+| `batch_delete_messages` | Permanently delete multiple messages |
+| `list_drafts` | List drafts |
+| `get_draft` | Get a specific draft |
+| `create_draft` | Create new draft (structured or raw MIME) |
+| `update_draft` | Update existing draft |
+| `delete_draft` | Delete a draft |
+| `send_draft` | Send an existing draft |
+| `list_labels` | List all Gmail labels |
+| `get_label` | Get a specific label |
+| `create_label` | Create new label (supports nested "/" names) |
+| `update_label` | Update label name/color/visibility |
+| `delete_label` | Delete a label (messages are preserved) |
+| `list_threads` | List threads with query/pagination |
+| `get_thread` | Get a thread with all messages |
+| `trash_thread` | Move thread to trash |
+| `untrash_thread` | Remove thread from trash |
+| `delete_thread` | Permanently delete thread |
+| `modify_thread` | Add/remove labels from thread |
+| `get_attachment` | Download message attachment (base64url) |
+| `list_filters` | List mail filters |
+| `create_filter` | Create filter (auto-label, archive, forward, delete, etc.) |
+| `delete_filter` | Delete a filter |
+| `get_auto_reply` | Get vacation responder settings |
+| `set_auto_reply` | Enable/disable vacation responder |
+
+**Gmail search queries:** Use standard Gmail search syntax: `from:user@example.com`, `subject:hello`, `is:unread`, `after:2026/01/01`, `has:attachment`, `label:important`.
 
 ## Quick Workflows
 

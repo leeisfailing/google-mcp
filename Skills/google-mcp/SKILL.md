@@ -1,6 +1,6 @@
 ---
 name: google-mcp
-description: "Google Workspace MCP — 279 tools across Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, and Labels. Auto-activate when user mentions ANY Google service, file, document, spreadsheet, calendar, form, presentation, classroom, meeting, or label."
+description: "Google Workspace MCP — 330 tools across Drive, Calendar, Docs, Sheets, Slides, Forms, Classroom, Meet, Labels, and Gmail. Auto-activate when user mentions ANY Google service, file, document, spreadsheet, calendar, form, presentation, classroom, meeting, label, email, or message."
 risk: safe
 source: "leeisfailing/google-mcp"
 date_added: "2026-06-29"
@@ -8,7 +8,7 @@ date_added: "2026-06-29"
 
 # Google MCP — Complete Reference
 
-279 tools covering 9 Google Workspace APIs. This is the single source of truth for all available operations.
+330 tools covering 10 Google Workspace APIs. This is the single source of truth for all available operations.
 
 ## AUTO-ACTIVATION TRIGGERS
 
@@ -21,6 +21,7 @@ Activate this skill **immediately** when the user mentions:
 - Classroom, course, assignment, submission, grade, student, teacher
 - Meet, conference, video call
 - Label, tag, category
+- Gmail, email, message, inbox, draft, send, reply, forward, filter, vacation, auto-reply
 - Any tool name starting with: create_, get_, list_, update_, delete_, add_, remove_, share_, export_, import_, search_, copy_, move_, batch_, find_, sort_, merge_, set_
 
 **Do NOT ask which tool to use.** The AI should know the tool from context.
@@ -35,7 +36,7 @@ To verify every tool works correctly, use the comprehensive test prompt in `TEST
 
 ## COMPLETE TOOL REFERENCE BY SERVICE
 
-### Google Drive (35 tools)
+### Google Drive (33 tools)
 
 | Tool | Description |
 |---|---|
@@ -142,7 +143,7 @@ To verify every tool works correctly, use the comprehensive test prompt in `TEST
 
 ---
 
-### Google Sheets (47 tools)
+### Google Sheets (56 tools)
 
 | Tool | Description |
 |---|---|
@@ -207,7 +208,7 @@ To verify every tool works correctly, use the comprehensive test prompt in `TEST
 
 ---
 
-### Google Slides (34 tools)
+### Google Slides (35 tools)
 
 | Tool | Description |
 |---|---|
@@ -410,6 +411,48 @@ To verify every tool works correctly, use the comprehensive test prompt in `TEST
 
 **Field types:** `TEXT` (string), `INTEGER` (number), `SELECTION` (options), `DATE` (year/month/day), `USER` (user email), `EMAIL` (email address).
 
+### Gmail (33 tools)
+
+| Tool | Description |
+|------|-------------|
+| `list_messages` | List messages with query, labels, pagination |
+| `get_message` | Get full message with headers, body, metadata |
+| `get_message_raw` | Get raw MIME content |
+| `send_message` | Send email (structured or raw MIME) with attachments |
+| `reply_to_message` | Reply (auto-sets In-Reply-To, Re: prefix) |
+| `forward_message` | Forward message with optional prepended text |
+| `trash_message` | Move message to trash |
+| `untrash_message` | Remove message from trash |
+| `delete_message` | Permanently delete (bypasses trash) |
+| `modify_message` | Add/remove labels from a message |
+| `batch_modify_messages` | Modify labels on multiple messages |
+| `batch_delete_messages` | Permanently delete multiple messages |
+| `list_drafts` | List drafts |
+| `get_draft` | Get a specific draft |
+| `create_draft` | Create new draft |
+| `update_draft` | Update existing draft |
+| `delete_draft` | Delete a draft |
+| `send_draft` | Send an existing draft |
+| `list_labels` | List all Gmail labels |
+| `get_label` | Get a specific label |
+| `create_label` | Create label (supports nested "/" names) |
+| `update_label` | Update label name/color/visibility |
+| `delete_label` | Delete label (messages preserved) |
+| `list_threads` | List threads with query/pagination |
+| `get_thread` | Get thread with all messages |
+| `trash_thread` | Move thread to trash |
+| `untrash_thread` | Remove thread from trash |
+| `delete_thread` | Permanently delete thread |
+| `modify_thread` | Add/remove labels from thread |
+| `get_attachment` | Download attachment (base64url) |
+| `list_filters` | List mail filters |
+| `create_filter` | Create filter (auto-label, archive, forward, etc.) |
+| `delete_filter` | Delete a filter |
+| `get_auto_reply` | Get vacation responder settings |
+| `set_auto_reply` | Enable/disable vacation responder |
+
+**Gmail queries:** `from:user@example.com`, `subject:hello`, `is:unread`, `after:2026/01/01`, `has:attachment`, `label:important`.
+
 ---
 
 ## QUICK WORKFLOWS
@@ -417,6 +460,18 @@ To verify every tool works correctly, use the comprehensive test prompt in `TEST
 ### Share a file
 ```
 share_drive_file { fileId: "xxx", email: "user@example.com", role: "writer" }
+```
+
+### Trash and restore a file
+```
+delete_drive_file { fileId: "xxx", permanent: false }
+→ delete_drive_file { fileId: "xxx", permanent: true }
+```
+Use `permanent: false` to move to trash (reversible). Use `permanent: true` to delete forever.
+
+### Export doc as Markdown
+```
+docs_export_document { documentId: "xxx", format: "MARKDOWN" }
 ```
 
 ### Create event with Meet link
@@ -450,8 +505,17 @@ docs_create_document { title: "Report" }
 ### Build a form
 ```
 create_form { title: "Feedback" }
-→ add_text_question { formId: "...", title: "Name", required: true }
-→ add_multiple_choice_question { formId: "...", title: "Rating", options: ["Excellent","Good","Fair"] }
+→ add_text_question { formId: "...", questionTitle: "Name", required: true }
+→ add_multiple_choice_question { formId: "...", questionTitle: "Rating", options: ["Excellent","Good","Fair"] }
+→ add_page_break { formId: "..." }
+→ add_paragraph_question { formId: "...", questionTitle: "Comments" }
+```
+
+### Reorder form items
+```
+get_form { formId: "..." }          // returns items with itemIds
+→ reorder_items { formId: "...", itemId: "...", newIndex: 0 }
+→ move_item { formId: "...", itemId: "...", newIndex: 2 }
 ```
 
 ### Course + assignment

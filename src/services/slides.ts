@@ -785,7 +785,6 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       case 'slides_list_presentation_slides': {
         const response = await slides.presentations.get({
           presentationId: args.presentationId,
-          fields: 'slides(objectId,slideProperties,masterPageId)',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(response.data.slides || [], null, 2) }],
@@ -796,7 +795,9 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       // Slide Operations
       // ---------------------------------------------------------------
       case 'slides_add_slide': {
-        const request: any = { slides: [{ layoutId: args.layoutId || 'BLANK' }] };
+        const request: any = {
+          slideLayoutReference: { predefinedLayout: args.layoutId || 'BLANK' },
+        };
         if (args.slideIndex !== undefined) {
           request.insertionIndex = args.slideIndex;
         }
@@ -884,11 +885,14 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       case 'slides_create_shape': {
         const eId = args.elementId || generateId();
         const unit = args.unit || 'inches';
+        const slideId = args.slideId || args.pageId;
+        if (!slideId) throw new McpError(ErrorCode.InvalidParams, 'slideId is required');
         const request: any = {
           createShape: {
             shapeType: args.shapeType,
+            objectId: eId,
             elementProperties: {
-              objectId: eId,
+              pageObjectId: slideId,
               size: {
                 width: emuValue(toEmu(args.width, unit)),
                 height: emuValue(toEmu(args.height, unit)),
@@ -977,10 +981,14 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       case 'slides_create_text_box': {
         const eId = args.elementId || generateId();
         const unit = args.unit || 'inches';
+        const slideId = args.slideId || args.pageId;
+        if (!slideId) throw new McpError(ErrorCode.InvalidParams, 'slideId is required');
         const requests: any[] = [{
-          createTextBox: {
+          createShape: {
+            shapeType: 'TEXT_BOX',
+            objectId: eId,
             elementProperties: {
-              objectId: eId,
+              pageObjectId: slideId,
               size: {
                 width: emuValue(toEmu(args.width, unit)),
                 height: emuValue(toEmu(args.height, unit)),
@@ -1035,14 +1043,17 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       case 'slides_create_image': {
         const eId = args.elementId || generateId();
         const unit = args.unit || 'inches';
+        const slideId = args.slideId || args.pageId;
+        if (!slideId) throw new McpError(ErrorCode.InvalidParams, 'slideId is required');
         const response = await slides.presentations.batchUpdate({
           presentationId: args.presentationId,
           requestBody: {
             requests: [{
               createImage: {
                 url: args.imageUrl,
+                objectId: eId,
                 elementProperties: {
-                  objectId: eId,
+                  pageObjectId: slideId,
                   size: {
                     width: emuValue(toEmu(args.width, unit)),
                     height: emuValue(toEmu(args.height, unit)),
@@ -1062,7 +1073,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         const eId = args.elementId || generateId();
         const unit = args.unit || 'inches';
 
-        const lineCategory = args.lineCategory || 'BOLD';
+        const lineCategory = args.lineCategory || 'DEFAULT';
         const lineStyle = args.lineStyle || 'SOLID';
         const lineWeight = args.lineWeight || 1;
 
@@ -1081,8 +1092,8 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         const requests: any[] = [{
           createLine: {
             lineCategory: lineCategory,
+            objectId: eId,
             elementProperties: {
-              objectId: eId,
               size: {
                 width: emuValue(w),
                 height: emuValue(h),
@@ -1183,11 +1194,9 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           requests.push({
             deleteText: {
               objectId: args.elementId,
-              textLocation: {
-                insertTextLocation: {
-                  startIndex: args.startIndex,
-                  endIndex: args.endIndex,
-                },
+              textRange: {
+                type: 'FIXED_RANGE',
+                location: { startIndex: args.startIndex, endIndex: args.endIndex },
               },
             },
           });
@@ -1200,10 +1209,9 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           });
         } else {
           // Delete all existing text and insert new
-          // First get current text to know the range
           const pres = await slides.presentations.get({
             presentationId: args.presentationId,
-            fields: 'slides(objectId,pageElements(objectId,shape,text))',
+            fields: 'slides(objectId,pageElements(objectId,shape(text.textElements.textRun.content)))',
           });
           let currentText = '';
           for (const slide of pres.data.slides || []) {
@@ -1217,11 +1225,9 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
             requests.push({
               deleteText: {
                 objectId: args.elementId,
-                textLocation: {
-                  insertTextLocation: {
-                    startIndex: 0,
-                    endIndex: currentText.length,
-                  },
+                textRange: {
+                  type: 'FIXED_RANGE',
+                  location: { startIndex: 0, endIndex: currentText.length },
                 },
               },
             });
@@ -1269,9 +1275,10 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
             requests: [{
               updateTextStyle: {
                 objectId: args.elementId,
-                textStyle: style,
+                style: style,
                 fields: fields.join(','),
-                insertTextLocation: {
+                textRange: {
+                  type: 'FIXED_RANGE',
                   startIndex: args.startIndex,
                   endIndex: args.endIndex,
                 },
@@ -1326,14 +1333,10 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
             requests: [{
               updateParagraphStyle: {
                 objectId: args.elementId,
-                paragraphStyle: style,
+                style: style,
                 fields: fields.join(','),
-                textLocation: {
-                  insertTextLocation: {
-                    segmentId: '',
-                    startIndex: -1,
-                    endIndex: -1,
-                  },
+                textRange: {
+                  type: 'TO_THE_END',
                 },
               },
             }],
@@ -1354,8 +1357,8 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
               createTable: {
                 rows: args.rows,
                 columns: args.columns,
+                objectId: eId,
                 elementProperties: {
-                  objectId: eId,
                   size: {
                     width: emuValue(toEmu(args.width, unit)),
                     height: emuValue(toEmu(args.height, unit)),
@@ -1414,20 +1417,18 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           presentationId: args.presentationId,
           requestBody: {
             requests: [{
-              updateTableProperties: {
-                tableProperties: {
-                  tableRange: {
-                    location: {
-                      slideIndex: 0,
-                    },
-                    rowSpan: 1,
-                    columnSpan: 1,
+              updateTableCellProperties: {
+                objectId: args.tableId,
+                tableCellProperties: cellProps,
+                tableRange: {
+                  location: {
+                    rowIndex: args.rowIndex,
+                    columnIndex: args.columnIndex,
                   },
+                  rowSpan: 1,
+                  columnSpan: 1,
                 },
                 fields: fieldsList.join(','),
-                objectId: args.tableId,
-                rowIndex: args.rowIndex,
-                columnIndex: args.columnIndex,
               },
             }],
           } as any,
@@ -1483,21 +1484,8 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           } as any,
         });
 
-        // Also update size if specified
-        if (props.size) {
-          await slides.presentations.batchUpdate({
-            presentationId: args.presentationId,
-            requestBody: {
-              requests: [{
-                updateObjectProperties: {
-                  objectId: args.elementId,
-                  objectProperties: props.size,
-                  fields: 'size',
-                },
-              }],
-            } as any,
-          });
-        }
+        // Note: Size cannot be updated after creation via Slides API.
+        // Size is set when the element is created. To change size, delete and recreate.
 
         return {
           content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }],
@@ -1699,7 +1687,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
               objectId: args.elementId,
               shapeProperties: {
                 shadow: {
-                  visible: false,
+                  propertyState: 'NOT_RENDERED',
                 },
               },
               fields: 'shadow',
@@ -1707,8 +1695,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           });
         } else {
           const shadowProps: any = {
-            visible: true,
-            type: 'OUTER',
+            propertyState: 'RENDERED',
           };
           if (args.color) {
             shadowProps.color = { opaqueColor: parseColor(args.color) };
@@ -1719,11 +1706,18 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
           if (args.blurRadius !== undefined) {
             shadowProps.blurRadius = { magnitude: args.blurRadius * EMU_PER_POINT, unit: 'EMU' };
           }
-          if (args.offsetX !== undefined) {
-            shadowProps.offsetX = { magnitude: args.offsetX * EMU_PER_POINT, unit: 'EMU' };
-          }
-          if (args.offsetY !== undefined) {
-            shadowProps.offsetY = { magnitude: args.offsetY * EMU_PER_POINT, unit: 'EMU' };
+          if (args.offsetX !== undefined || args.offsetY !== undefined) {
+            const dx = (args.offsetX || 0) * EMU_PER_POINT;
+            const dy = (args.offsetY || 0) * EMU_PER_POINT;
+            shadowProps.transform = {
+              scaleX: 1,
+              scaleY: 1,
+              shearX: 0,
+              shearY: 0,
+              translateX: dx,
+              translateY: dy,
+              unit: 'EMU',
+            };
           }
 
           requests.push({
@@ -1873,17 +1867,67 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       // Notes
       // ---------------------------------------------------------------
       case 'slides_set_slide_notes': {
+        // First get the speaker notes object ID
+        const pres = await slides.presentations.get({
+          presentationId: args.presentationId,
+        });
+        const slide = (pres.data.slides || []).find((s: any) => s.objectId === args.slideId);
+        if (!slide) {
+          throw new McpError(ErrorCode.InvalidParams, `Slide ${args.slideId} not found`);
+        }
+        let notesObjectId = (slide as any).slideProperties?.notesProperties?.speakerNotesObjectId;
+        const requests: any[] = [];
+
+        // If no notes object exists, create one via updateSlideProperties
+        if (!notesObjectId) {
+          notesObjectId = generateId();
+          requests.push({
+            updateSlideProperties: {
+              objectId: args.slideId,
+              slideProperties: {
+                notesProperties: {
+                  speakerNotesObjectId: notesObjectId,
+                },
+              },
+              fields: 'notesProperties.speakerNotesObjectId',
+            },
+          });
+          // After creating the notes shape, we need to insert text in a second request
+        } else {
+          // Delete existing notes text first
+          for (const s of pres.data.slides || []) {
+            if (s.objectId === args.slideId) {
+              for (const pe of s.pageElements || []) {
+                if (pe.objectId === notesObjectId && pe.shape?.text?.textElements) {
+                  const currentLen = (pe.shape.text.textElements || []).reduce(
+                    (acc: number, te: any) => acc + (te.textRun?.content?.length || 0), 0
+                  );
+                  if (currentLen > 0) {
+                    requests.push({
+                      deleteText: {
+                        objectId: notesObjectId,
+                        textRange: { type: 'FIXED_RANGE', location: { startIndex: 0, endIndex: currentLen } },
+                      },
+                    });
+                  }
+                  break;
+                }
+              }
+              break;
+            }
+          }
+        }
+        requests.push({
+          insertText: {
+            objectId: notesObjectId,
+            insertionIndex: 0,
+            text: args.notes,
+          },
+        });
+
         const response = await slides.presentations.batchUpdate({
           presentationId: args.presentationId,
-          requestBody: {
-            requests: [{
-              insertText: {
-                objectId: `${args.slideId}_notes`,
-                insertionIndex: 0,
-                text: args.notes,
-              },
-            }],
-          } as any,
+          requestBody: { requests } as any,
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }],
@@ -1893,7 +1937,7 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       case 'slides_get_slide_notes': {
         const pres = await slides.presentations.get({
           presentationId: args.presentationId,
-          fields: 'slides(objectId,slideProperties.notesProperties)',
+          fields: 'slides(objectId,slideProperties.notesProperties,pageElements(objectId,shape(text.textElements.textRun.content)))',
         });
         const slide = (pres.data.slides || []).find((s: any) => s.objectId === args.slideId);
         if (!slide) {

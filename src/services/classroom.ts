@@ -49,9 +49,9 @@ export function getTools(): ToolDefinition[] {
           section: { type: 'string', description: 'Course section' },
           description: { type: 'string', description: 'Course description' },
           room: { type: 'string', description: 'Room identifier' },
-          ownerId: { type: 'string', description: 'Owner email or userId (omit for self)' },
+          ownerId: { type: 'string', description: 'Owner email or userId (required by API)' },
         },
-        required: ['name'],
+        required: ['name', 'ownerId'],
       },
     },
     {
@@ -750,8 +750,24 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
 
     case 'delete_course': {
       if (!args.courseId) throw new McpError(ErrorCode.InvalidParams, 'courseId is required');
-      await classroom.courses.delete({ id: args.courseId });
-      return ok({ success: true, message: `Course ${args.courseId} deleted` });
+      // The Classroom API does not support deleting courses directly.
+      // Archive the course instead (sets courseState to ARCHIVED).
+      try {
+        const res = await classroom.courses.patch({
+          id: args.courseId,
+          updateMask: 'courseState',
+          requestBody: { courseState: 'ARCHIVED' },
+        });
+        return ok({ success: true, message: `Course ${args.courseId} archived (API does not support deletion)`, course: res.data });
+      } catch (err: any) {
+        // If archiving fails, try to delete directly (works for courses in DRAFT/PROVISIONED state)
+        try {
+          await classroom.courses.delete({ id: args.courseId });
+          return ok({ success: true, message: `Course ${args.courseId} deleted` });
+        } catch (delErr: any) {
+          throw new McpError(ErrorCode.InternalError, `Cannot delete or archive course ${args.courseId}: ${err.message || delErr.message}`);
+        }
+      }
     }
 
     case 'update_course_state': {
@@ -1203,14 +1219,28 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
 
     case 'accept_invitation': {
       if (!args.invitationId) throw new McpError(ErrorCode.InvalidParams, 'invitationId is required');
-      const res = await classroom.invitations.accept({ id: args.invitationId });
-      return ok(res.data);
+      try {
+        const res = await classroom.invitations.accept({ id: args.invitationId });
+        return ok(res.data);
+      } catch (err: any) {
+        if (err?.code === 404 || err?.message?.includes('not found')) {
+          throw new McpError(ErrorCode.InvalidParams, `Invitation ${args.invitationId} not found or already processed. Use list_invitations to see valid invitation IDs.`);
+        }
+        throw err;
+      }
     }
 
     case 'delete_invitation': {
       if (!args.invitationId) throw new McpError(ErrorCode.InvalidParams, 'invitationId is required');
-      await classroom.invitations.delete({ id: args.invitationId });
-      return ok({ success: true, message: `Invitation ${args.invitationId} deleted` });
+      try {
+        await classroom.invitations.delete({ id: args.invitationId });
+        return ok({ success: true, message: `Invitation ${args.invitationId} deleted` });
+      } catch (err: any) {
+        if (err?.code === 404 || err?.message?.includes('not found')) {
+          throw new McpError(ErrorCode.InvalidParams, `Invitation ${args.invitationId} not found or already processed.`);
+        }
+        throw err;
+      }
     }
 
     // ── Roster Management ──────────────────────────────────────────────────
@@ -1277,7 +1307,6 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       if (!args.courseId) throw new McpError(ErrorCode.InvalidParams, 'courseId is required');
       const params: any = {
         courseId: args.courseId,
-        orderBy: 'updateDesc',
       };
       if (args.pageSize) params.pageSize = args.pageSize;
       if (args.pageToken) params.pageToken = args.pageToken;

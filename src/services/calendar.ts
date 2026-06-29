@@ -1050,10 +1050,14 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         eventId: args.eventId,
       });
 
-      // Find the specific instance by matching instanceDate
+      // Find the specific instance by matching instanceDate with date tolerance
+      const target = new Date(args.instanceDate).getTime();
       const instance = (instances.data.items || []).find((item: any) => {
         const itemStart = item.start?.dateTime || item.start?.date;
-        return itemStart === args.instanceDate;
+        if (!itemStart) return false;
+        const itemTime = new Date(itemStart).getTime();
+        // Allow 60s tolerance for timezone/format differences
+        return Math.abs(itemTime - target) < 60000;
       });
       if (!instance) throw new McpError(ErrorCode.MethodNotFound, 'Could not find event instance matching instanceDate');
 
@@ -1089,10 +1093,13 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
         eventId: args.eventId,
       });
 
-      // Find the specific instance by matching instanceDate
+      // Find the specific instance by matching instanceDate with date tolerance
+      const target = new Date(args.instanceDate).getTime();
       const instance = (instances.data.items || []).find((item: any) => {
         const itemStart = item.start?.dateTime || item.start?.date;
-        return itemStart === args.instanceDate;
+        if (!itemStart) return false;
+        const itemTime = new Date(itemStart).getTime();
+        return Math.abs(itemTime - target) < 60000;
       });
       if (!instance) throw new McpError(ErrorCode.MethodNotFound, 'Could not find event instance matching instanceDate');
 
@@ -1206,18 +1213,40 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       if (!args.scopeType) throw new McpError(ErrorCode.InvalidParams, 'scopeType is required');
       if (!args.role) throw new McpError(ErrorCode.InvalidParams, 'role is required');
 
+      // Prevent self-referencing rules (Google rejects them with a confusing error)
+      if (args.scopeType === 'user' && args.scopeValue) {
+        try {
+          const me = await cal.calendarList.get({ calendarId: 'primary' });
+          const myEmail = me.data.id;
+          if (myEmail && args.scopeValue.toLowerCase() === myEmail.toLowerCase()) {
+            throw new McpError(ErrorCode.InvalidParams, 'Cannot add ACL rule for your own email. The owner always has full access.');
+          }
+        } catch (e: any) {
+          if (e instanceof McpError) throw e;
+          // Ignore — proceed without the check
+        }
+      }
+
       const scope: any = { type: args.scopeType };
       if (args.scopeValue) scope.value = args.scopeValue;
 
-      const res = await cal.acl.insert({
-        calendarId: id,
-        requestBody: {
-          scope,
-          role: args.role,
-        },
-      });
+      try {
+        const res = await cal.acl.insert({
+          calendarId: id,
+          requestBody: {
+            scope,
+            role: args.role,
+          },
+          sendNotifications: args.sendNotifications !== false,
+        });
 
-      return ok(res.data);
+        return ok(res.data);
+      } catch (err: any) {
+        if (err?.code === 403 || err?.message?.includes('Cannot modify')) {
+          throw new McpError(ErrorCode.InvalidParams, `Cannot add ACL rule for ${args.scopeType}:${args.scopeValue || '*'} with role ${args.role}. You may not have permission to share this calendar, or you cannot change your own access level.`);
+        }
+        throw err;
+      }
     }
 
     case 'delete_calendar_acl': {
@@ -1235,13 +1264,74 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
     // ── Imports ────────────────────────────────────────────────────────────
 
     case 'import_event': {
-      if (!args.summary) throw new McpError(ErrorCode.InvalidParams, 'summary is required');
+      const id = args.calendarId || 'primary';
+
+      // Support two modes: raw ICS data, or structured params
+      if (args.icsData) {
+        // Parse ICS data into a Calendar API Event resource
+        const ics = args.icsData;
+        const getField = (name: string): string => {
+          // Handle folded lines (continuation lines start with space/tab)
+          const unfolded = ics.replace(/\r?\n[ \t]/g, '');
+          const match = unfolded.match(new RegExp(`^${name}[^:]*:(.+)$`, 'm'));
+          return match ? match[1].trim() : '';
+        };
+
+        const parseICSDate = (val: string): any => {
+          if (!val) return undefined;
+          // Format: 20260630T120000Z or 20260630T120000
+          const m = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+          if (m) {
+            const isUTC = m[7] === 'Z';
+            const dt = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${isUTC ? 'Z' : ''}`;
+            return { dateTime: dt, timeZone: isUTC ? 'UTC' : (args.timeZone || 'UTC') };
+          }
+          // All-day date: 20260630
+          const dm = val.match(/^(\d{4})(\d{2})(\d{2})$/);
+          if (dm) return { date: `${dm[1]}-${dm[2]}-${dm[3]}` };
+          return undefined;
+        };
+
+        const resource: any = {};
+        const uid = getField('UID');
+        if (uid) resource.iCalUID = uid;
+
+        const summary = getField('SUMMARY');
+        if (summary) resource.summary = summary;
+
+        const description = getField('DESCRIPTION');
+        if (description) resource.description = description.replace(/\\n/g, '\n').replace(/\\,/g, ',');
+
+        const location = getField('LOCATION');
+        if (location) resource.location = location;
+
+        const dtstart = getField('DTSTART');
+        if (dtstart) resource.start = parseICSDate(dtstart);
+
+        const dtend = getField('DTEND');
+        if (dtend) resource.end = parseICSDate(dtend);
+        else if (resource.start) {
+          // For all-day events, default end is next day
+          resource.end = resource.start;
+        }
+
+        if (!resource.summary) throw new McpError(ErrorCode.InvalidParams, 'ICS data must contain a SUMMARY field');
+        if (!resource.start) throw new McpError(ErrorCode.InvalidParams, 'ICS data must contain a DTSTART field');
+
+        const res = await cal.events.import({
+          calendarId: id,
+          requestBody: resource,
+        });
+        return ok(res.data);
+      }
+
+      // Fallback: structured params
+      if (!args.summary) throw new McpError(ErrorCode.InvalidParams, 'summary (or icsData) is required');
       if (!args.startDateTime) throw new McpError(ErrorCode.InvalidParams, 'startDateTime is required');
       if (!args.endDateTime) throw new McpError(ErrorCode.InvalidParams, 'endDateTime is required');
-      const id = args.calendarId || 'primary';
-      const sendUpdates = args.sendNotifications !== false ? 'all' : 'none';
 
       const resource: any = {
+        iCalUID: `${Date.now()}-${Math.random().toString(36).slice(2)}@google-mcp`,
         summary: args.summary,
         start: { dateTime: rfc3339(args.startDateTime), timeZone: args.timeZone || 'UTC' },
         end: { dateTime: rfc3339(args.endDateTime), timeZone: args.timeZone || 'UTC' },
@@ -1249,12 +1339,12 @@ export async function executeTool(name: string, args: any, oauth2Client: any): P
       if (args.description) resource.description = args.description;
       if (args.location) resource.location = args.location;
 
-      const res = await cal.events.import({
+      const res2 = await cal.events.import({
         calendarId: id,
         requestBody: resource,
       });
 
-      return ok(res.data);
+      return ok(res2.data);
     }
 
     default:

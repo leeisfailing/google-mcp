@@ -983,7 +983,6 @@ async function createChart(sheets: SheetsClient, args: any) {
 
   const pos = args.position || {};
   const chart: any = {
-    chartType: args.chartType,
     spec: {
       titleText: args.title || '',
       subtitleText: args.subtitle || '',
@@ -1006,8 +1005,9 @@ async function createChart(sheets: SheetsClient, args: any) {
     },
   };
 
-  // Parse A1 notation for data range
-  const a1Match = args.dataRange.match(/^([^!]+)!([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+  // Parse A1 notation for data range (handles $-prefixed refs)
+  const cleanRange = args.dataRange.replace(/\$/g, ''); // strip absolute refs
+  const a1Match = cleanRange.match(/^([^!]+)!([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
   if (a1Match) {
     const sheetName = a1Match[1];
     const startCol = colToIndex(a1Match[2]);
@@ -1142,19 +1142,30 @@ function buildConditionType(ct: string): any {
     TEXT_NOT_CONTAINS: 'TEXT_NOT_CONTAINS',
     TEXT_STARTS_WITH: 'TEXT_STARTS_WITH',
     TEXT_ENDS_WITH: 'TEXT_ENDS_WITH',
+    TEXT_IS_EMAIL: 'TEXT_IS_EMAIL',
+    TEXT_IS_URL: 'TEXT_IS_URL',
     DATE_BEFORE: 'DATE_BEFORE',
     DATE_AFTER: 'DATE_AFTER',
     DATE_BETWEEN: 'DATE_BETWEEN',
+    DATE_EQ: 'DATE_EQ',
+    DATE_NOT_EQ: 'DATE_NOT_EQ',
+    DATE_EQ_OR_BEFORE: 'DATE_EQ_OR_BEFORE',
+    DATE_EQ_OR_AFTER: 'DATE_EQ_OR_AFTER',
+    DATE_NOT_BETWEEN: 'DATE_NOT_BETWEEN',
     NUMBER_GREATER: 'NUMBER_GREATER',
+    NUMBER_GREATER_EQ: 'NUMBER_GREATER_EQ',
     NUMBER_LESS: 'NUMBER_LESS',
+    NUMBER_LESS_EQ: 'NUMBER_LESS_EQ',
     NUMBER_EQ: 'NUMBER_EQ',
     NUMBER_NOT_EQ: 'NUMBER_NOT_EQ',
     NUMBER_BETWEEN: 'NUMBER_BETWEEN',
+    NUMBER_NOT_BETWEEN: 'NUMBER_NOT_BETWEEN',
     CUSTOM_FORMULA: 'CUSTOM_FORMULA',
     IS_EMPTY: 'IS_EMPTY',
     IS_NOT_EMPTY: 'IS_NOT_EMPTY',
   };
-  return map[ct] || 'CELL_IS';
+  if (!map[ct]) throw new McpError(ErrorCode.InvalidParams, `Unknown condition type: ${ct}. Valid types: ${Object.keys(map).join(', ')}`);
+  return map[ct];
 }
 
 function buildCondition(args: any): any {
@@ -1353,7 +1364,7 @@ function buildValidationCriteria(args: any): any {
     }
     case 'CHECKBOX':
       return {
-        condition: { type: 'CHECKBOX' },
+        condition: { type: 'BOOLEAN' },
         strict: true,
       };
     case 'DATE': {
@@ -1863,22 +1874,26 @@ async function addSparkline(sheets: SheetsClient, args: any) {
 
 async function createDataSource(sheets: SheetsClient, args: any) {
   if (!args.spreadsheetId) throw new McpError(ErrorCode.InvalidParams, 'spreadsheetId is required');
-  if (!args.dataSourceId) throw new McpError(ErrorCode.InvalidParams, 'dataSourceId is required');
   if (!args.type) throw new McpError(ErrorCode.InvalidParams, 'type is required');
 
   const ds: any = {
-    dataSourceId: args.dataSourceId,
-    name: args.name || args.dataSourceId,
-    type: args.type,
+    name: args.name || 'Data Source',
   };
 
-  if (args.type === 'BIGQUERY' && args.bigQueryOptions) {
-    ds.bigQueryOptions = {
-      ...(args.bigQueryOptions.projectId ? { projectId: args.bigQueryOptions.projectId } : {}),
-      ...(args.bigQueryOptions.datasetId ? { datasetId: args.bigQueryOptions.datasetId } : {}),
-      ...(args.bigQueryOptions.tableId ? { tableId: args.bigQueryOptions.tableId } : {}),
-      ...(args.bigQueryOptions.query ? { query: args.bigQueryOptions.query } : {}),
-    };
+  if (args.type === 'BIGQUERY') {
+    const bq = args.bigQueryOptions || args.options || {};
+    const spec: any = {};
+    if (bq.projectId) spec.projectId = bq.projectId;
+    if (bq.query) {
+      spec.querySpec = { query: bq.query };
+    } else if (bq.tableId) {
+      spec.tableSpec = {
+        tableProjectId: bq.projectId,
+        datasetId: bq.datasetId,
+        tableId: bq.tableId,
+      };
+    }
+    ds.specification = { bigQuerySpec: spec };
   }
 
   const resp = await sheets.spreadsheets.batchUpdate({
@@ -2008,6 +2023,10 @@ async function updateNamedRange(sheets: SheetsClient, args: any) {
     range = gridRange(args);
   }
 
+  const updateFields: string[] = [];
+  if (args.name) updateFields.push('name');
+  if (args.a1Range || args.sheetId !== undefined) updateFields.push('range');
+
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: args.spreadsheetId,
     requestBody: {
@@ -2018,6 +2037,7 @@ async function updateNamedRange(sheets: SheetsClient, args: any) {
             name: args.name || existing.name,
             range,
           },
+          fields: updateFields.length > 0 ? updateFields.join(',') : 'name,range',
         },
       }],
     },
